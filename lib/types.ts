@@ -71,6 +71,8 @@ export type LeagueTeam = {
   isPlayer: boolean;
   attack: number;
   defense: number;
+  xi?: PlayerSeason[];
+  bench?: PlayerSeason[];
 };
 
 export type GoalScorer = {
@@ -88,6 +90,7 @@ export type MatchResult = {
   homeGoals: number;
   awayGoals: number;
   scorers?: GoalScorer[];
+  played?: boolean;
 };
 
 export type TableRow = {
@@ -106,7 +109,10 @@ export type LeagueState = {
   teams: LeagueTeam[];
   matches: MatchResult[];
   table: TableRow[];
+  playedGameweeks?: number;
 };
+
+export type SimMode = "quick" | "match";
 
 export type GamePhase = "home" | "formation" | "draft" | "season";
 

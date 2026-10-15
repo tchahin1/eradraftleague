@@ -17,7 +17,7 @@ export function FormationScreen({ teamName, onTeamName, onChoose }: Props) {
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Step 1</p>
         <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">Pick your shape</h1>
         <p className="mx-auto max-w-xl text-emerald-100/75">
-          Formation locks your eleven pitch slots. You will still draft a seven-man bench, including a backup goalkeeper.
+          Formation locks your eleven pitch slots. Anyone can play anywhere. Similar roles (CM into CAM or CDM) are only −1, especially when this shape has no natural slot for them. A true mismatch still drops up to 10. You will still draft a seven-man bench, including a backup goalkeeper.
         </p>
         <label className="mx-auto mt-4 flex max-w-sm flex-col gap-1 text-left text-sm text-emerald-100/80">
           Club name

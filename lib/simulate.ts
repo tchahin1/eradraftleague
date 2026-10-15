@@ -288,8 +288,33 @@ export function pickOpponentClubSeasons(
   return selected;
 }
 
-function toLeagueTeam(team: SimTeam): LeagueTeam {
-  return {
+export const TOTAL_GAMEWEEKS = 38;
+
+export function isMatchPlayed(match: MatchResult): boolean {
+  return match.played !== false;
+}
+
+export function seasonLength(league: LeagueState): number {
+  return league.matches.reduce((max, match) => Math.max(max, match.gameweek), 0) || TOTAL_GAMEWEEKS;
+}
+
+export function playedGameweeksOf(league: LeagueState): number {
+  const total = seasonLength(league);
+  return Math.min(total, league.playedGameweeks ?? total);
+}
+
+export function isSeasonComplete(league: LeagueState): boolean {
+  return playedGameweeksOf(league) >= seasonLength(league);
+}
+
+export function nextGameweek(league: LeagueState): number | null {
+  const played = playedGameweeksOf(league);
+  const total = seasonLength(league);
+  return played >= total ? null : played + 1;
+}
+
+function toLeagueTeam(team: SimTeam, keepSquad: boolean): LeagueTeam {
+  const base: LeagueTeam = {
     id: team.id,
     name: team.name,
     club: team.club,
@@ -298,42 +323,104 @@ function toLeagueTeam(team: SimTeam): LeagueTeam {
     attack: team.attack,
     defense: team.defense,
   };
+  if (!keepSquad) return base;
+  return { ...base, xi: team.xi, bench: team.bench };
+}
+
+function asSimTeam(team: LeagueTeam): SimTeam {
+  return {
+    ...team,
+    xi: team.xi ?? [],
+    bench: team.bench ?? [],
+  };
+}
+
+function stripSquads(teams: LeagueTeam[]): LeagueTeam[] {
+  return teams.map((team) => {
+    const { xi: _xi, bench: _bench, ...rest } = team;
+    return rest;
+  });
+}
+
+function buildFixtures(teamIds: string[]): MatchResult[] {
+  const rounds = roundRobinPairs(teamIds);
+  const matches: MatchResult[] = [];
+  rounds.forEach((pairs, index) => {
+    pairs.forEach(([homeId, awayId], matchIndex) => {
+      matches.push({
+        id: `gw${index + 1}-m${matchIndex}`,
+        gameweek: index + 1,
+        homeId,
+        awayId,
+        homeGoals: 0,
+        awayGoals: 0,
+        scorers: [],
+        played: false,
+      });
+    });
+  });
+  return matches;
+}
+
+export function applyPlayerLineup(league: LeagueState, playerTeam: SimTeam): LeagueState {
+  return {
+    ...league,
+    teams: league.teams.map((team) =>
+      team.id === PLAYER_TEAM_ID ? toLeagueTeam(playerTeam, !isSeasonComplete(league)) : team,
+    ),
+  };
+}
+
+export function startSeason(playerTeam: SimTeam, opponents: SimTeam[]): LeagueState {
+  const simTeams = [playerTeam, ...opponents];
+  const teams = simTeams.map((team) => toLeagueTeam(team, true));
+  const matches = buildFixtures(teams.map((team) => team.id));
+  return {
+    teams,
+    matches,
+    table: buildTable(teams, []),
+    playedGameweeks: 0,
+  };
+}
+
+export function playGameweeks(league: LeagueState, throughGameweek: number): LeagueState {
+  const current = playedGameweeksOf(league);
+  const total = seasonLength(league);
+  const target = Math.min(total, Math.max(current, throughGameweek));
+  if (target <= current) return league;
+
+  const byId = new Map(league.teams.map((team) => [team.id, asSimTeam(team)]));
+  const matches = league.matches.map((match) => {
+    if (match.gameweek <= current || match.gameweek > target || isMatchPlayed(match)) return match;
+    const home = byId.get(match.homeId);
+    const away = byId.get(match.awayId);
+    if (!home || !away) return match;
+    const score = simulateMatch(home, away);
+    return {
+      ...match,
+      homeGoals: score.homeGoals,
+      awayGoals: score.awayGoals,
+      scorers: score.scorers,
+      played: true,
+    };
+  });
+
+  const complete = target >= total;
+  const teams = complete ? stripSquads(league.teams) : league.teams;
+  const playedMatches = matches.filter((match) => isMatchPlayed(match) && match.gameweek <= target);
+  return {
+    teams,
+    matches,
+    table: buildTable(teams, playedMatches),
+    playedGameweeks: target,
+  };
 }
 
 export function simulateSeason(
   playerTeam: SimTeam,
   opponents: SimTeam[],
 ): LeagueState {
-  const teams = [playerTeam, ...opponents];
-  const ids = teams.map((team) => team.id);
-  const byId = new Map(teams.map((team) => [team.id, team]));
-  const rounds = roundRobinPairs(ids);
-  const matches: MatchResult[] = [];
-
-  rounds.forEach((pairs, index) => {
-    pairs.forEach(([homeId, awayId], matchIndex) => {
-      const home = byId.get(homeId);
-      const away = byId.get(awayId);
-      if (!home || !away) return;
-      const score = simulateMatch(home, away);
-      matches.push({
-        id: `gw${index + 1}-m${matchIndex}`,
-        gameweek: index + 1,
-        homeId,
-        awayId,
-        homeGoals: score.homeGoals,
-        awayGoals: score.awayGoals,
-        scorers: score.scorers,
-      });
-    });
-  });
-
-  const leagueTeams = teams.map(toLeagueTeam);
-  return {
-    teams: leagueTeams,
-    matches,
-    table: buildTable(leagueTeams, matches),
-  };
+  return playGameweeks(startSeason(playerTeam, opponents), TOTAL_GAMEWEEKS);
 }
 
 export function makePlayerLeagueTeam(

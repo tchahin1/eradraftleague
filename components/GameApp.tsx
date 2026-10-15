@@ -14,16 +14,21 @@ import {
   FORMATION_BY_ID,
   hasBackupGk,
   isDraftComplete,
-  playerFitsSlot,
+  playInSlot,
 } from "@/lib/formations";
 import {
+  applyPlayerLineup,
   makeHistoricalLeagueTeam,
   makePlayerLeagueTeam,
+  nextGameweek,
   pickOpponentClubSeasons,
+  playGameweeks,
+  seasonLength,
   simulateSeason,
+  startSeason,
 } from "@/lib/simulate";
 import { clearGame, emptyGame, loadGame, saveGame } from "@/lib/storage";
-import type { FormationId, GameState, PlayerSeason } from "@/lib/types";
+import type { FormationId, GameState, PlayerSeason, SimMode } from "@/lib/types";
 import { DraftScreen } from "./DraftScreen";
 import { FormationScreen } from "./FormationScreen";
 import { SeasonScreen } from "./SeasonScreen";
@@ -95,7 +100,7 @@ export function GameApp() {
     if (alreadyDrafted) {
       if (target.type === "xi") {
         const slot = formation.slots.find((item) => item.id === target.slotId);
-        if (!slot || !playerFitsSlot(selectedPlayer, slot.kind)) return;
+        if (!slot) return;
         const occupant = nextXi[target.slotId];
         const fromBench = nextBench.findIndex((player) => player?.id === selectedPlayer.id);
         if (fromBench >= 0) {
@@ -104,7 +109,6 @@ export function GameApp() {
         } else {
           const fromSlot = Object.entries(nextXi).find(([, player]) => player?.id === selectedPlayer.id)?.[0];
           if (!fromSlot || fromSlot === target.slotId) return;
-          if (occupant && !playerFitsSlot(occupant, formation.slots.find((item) => item.id === fromSlot)!.kind)) return;
           nextXi[fromSlot] = occupant;
           nextXi[target.slotId] = selectedPlayer;
         }
@@ -114,7 +118,6 @@ export function GameApp() {
         const fromSlot = Object.entries(nextXi).find(([, player]) => player?.id === selectedPlayer.id)?.[0];
         const fromBench = nextBench.findIndex((player) => player?.id === selectedPlayer.id);
         if (fromSlot) {
-          if (occupant && !playerFitsSlot(occupant, formation.slots.find((item) => item.id === fromSlot)!.kind)) return;
           nextXi[fromSlot] = occupant;
           nextBench[target.index] = selectedPlayer;
         } else if (fromBench >= 0) {
@@ -131,7 +134,7 @@ export function GameApp() {
 
     if (target.type === "xi") {
       const slot = formation.slots.find((item) => item.id === target.slotId);
-      if (!slot || !playerFitsSlot(selectedPlayer, slot.kind)) return;
+      if (!slot) return;
       if (nextXi[target.slotId]) return;
       nextXi[target.slotId] = selectedPlayer;
     } else if (nextBench[target.index]) {
@@ -169,17 +172,46 @@ export function GameApp() {
     });
   };
 
-  const startSeason = () => {
+  const playerTeamFromLineup = () => {
+    if (!state.formationId) return null;
+    const formation = FORMATION_BY_ID[state.formationId];
+    const xiPlayers = formation.slots
+      .map((slot) => {
+        const player = state.xi[slot.id];
+        return player ? playInSlot(player, slot.kind, formation) : null;
+      })
+      .filter((player): player is PlayerSeason => Boolean(player));
+    if (xiPlayers.length < formation.slots.length) return null;
+    const benchPlayers = state.bench.filter((player): player is PlayerSeason => Boolean(player));
+    return makePlayerLeagueTeam(state.teamName, xiPlayers, benchPlayers);
+  };
+
+  const beginSeason = (mode: SimMode) => {
     if (!state.formationId) return;
     const formation = FORMATION_BY_ID[state.formationId];
-    const xiPlayers = formation.slots.map((slot) => state.xi[slot.id]).filter((p): p is PlayerSeason => Boolean(p));
-    const benchPlayers = state.bench.filter((p): p is PlayerSeason => Boolean(p));
     if (!isDraftComplete(formation, state.xi, state.bench) || !hasBackupGk(state.bench)) return;
-
-    const playerTeam = makePlayerLeagueTeam(state.teamName, xiPlayers, benchPlayers);
+    const playerTeam = playerTeamFromLineup();
+    if (!playerTeam) return;
     const opponents = pickOpponentClubSeasons(clubSeasons, 19).map(makeHistoricalLeagueTeam);
-    const league = simulateSeason(playerTeam, opponents);
+    const league =
+      mode === "quick" ? simulateSeason(playerTeam, opponents) : startSeason(playerTeam, opponents);
     setState({ ...state, phase: "season", league });
+  };
+
+  const playNextGameweek = () => {
+    if (!state.league) return;
+    const gameweek = nextGameweek(state.league);
+    if (!gameweek) return;
+    const playerTeam = playerTeamFromLineup();
+    const league = playerTeam ? applyPlayerLineup(state.league, playerTeam) : state.league;
+    setState({ ...state, league: playGameweeks(league, gameweek) });
+  };
+
+  const quickSimRest = () => {
+    if (!state.league) return;
+    const playerTeam = playerTeamFromLineup();
+    const league = playerTeam ? applyPlayerLineup(state.league, playerTeam) : state.league;
+    setState({ ...state, league: playGameweeks(league, seasonLength(league)) });
   };
 
   const rerollOffer = () => {
@@ -296,7 +328,7 @@ export function GameApp() {
             }
             placePick(target);
           }}
-          onStartSeason={startSeason}
+          onStartSeason={beginSeason}
         />
       </main>
     );
@@ -305,7 +337,17 @@ export function GameApp() {
   if (state.phase === "season" && state.league) {
     return (
       <main>
-        <SeasonScreen teamName={state.teamName} league={state.league} onNewGame={reset} />
+        <SeasonScreen
+          teamName={state.teamName}
+          league={state.league}
+          formationId={state.formationId}
+          xi={state.xi}
+          bench={state.bench}
+          onNewGame={reset}
+          onPlayNext={playNextGameweek}
+          onQuickSimRest={quickSimRest}
+          onLineupChange={(xi, bench) => setState({ ...state, xi, bench })}
+        />
       </main>
     );
   }

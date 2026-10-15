@@ -144,10 +144,10 @@ export function slotOccupiedBy(
 }
 
 export function canSwapToSlot(
-  player: PlayerSeason,
-  slotKind: SlotKindLike,
+  _player: PlayerSeason,
+  _slotKind: SlotKindLike,
 ): boolean {
-  return playerFitsSlot(player, slotKind);
+  return true;
 }
 
 type SlotKindLike = Parameters<typeof playerFitsSlot>[1];

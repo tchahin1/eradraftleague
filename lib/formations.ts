@@ -1,4 +1,4 @@
-import type { Formation, FormationId, PlayerSeason, SlotKind } from "./types";
+import type { Formation, FormationId, PlayerSeason, PositionGroup, SlotKind } from "./types";
 
 export const BENCH_SIZE = 7;
 export const SQUAD_SIZE = 11 + BENCH_SIZE;
@@ -112,25 +112,114 @@ export const FORMATION_BY_ID: Record<FormationId, Formation> = Object.fromEntrie
   FORMATIONS.map((formation) => [formation.id, formation]),
 ) as Record<FormationId, Formation>;
 
-const SLOT_FITS: Record<SlotKind, SlotKind[]> = {
-  GK: ["GK"],
-  CB: ["CB"],
-  LB: ["LB", "LWB"],
-  RB: ["RB", "RWB"],
-  LWB: ["LWB", "LB", "LM"],
-  RWB: ["RWB", "RB", "RM"],
-  CDM: ["CDM", "CM"],
-  CM: ["CM", "CDM", "CAM"],
-  CAM: ["CAM", "CM", "LW", "RW"],
-  LM: ["LM", "LW", "LWB"],
-  RM: ["RM", "RW", "RWB"],
-  LW: ["LW", "LM", "ST"],
-  RW: ["RW", "RM", "ST"],
-  ST: ["ST", "LW", "RW", "CAM"],
+export const MAX_POSITION_PENALTY = 10;
+
+const SLOT_AXIS: Record<SlotKind, { line: number; side: number }> = {
+  GK: { line: 0, side: 0 },
+  CB: { line: 1, side: 0 },
+  LB: { line: 1, side: -1 },
+  RB: { line: 1, side: 1 },
+  LWB: { line: 2, side: -1 },
+  RWB: { line: 2, side: 1 },
+  CDM: { line: 2, side: 0 },
+  CM: { line: 3, side: 0 },
+  LM: { line: 3, side: -1 },
+  RM: { line: 3, side: 1 },
+  CAM: { line: 4, side: 0 },
+  LW: { line: 5, side: -1 },
+  RW: { line: 5, side: 1 },
+  ST: { line: 5, side: 0 },
 };
 
-export function playerFitsSlot(player: PlayerSeason, kind: SlotKind): boolean {
-  return SLOT_FITS[kind].includes(player.slot);
+/** Close cousins — always -1, not a real mismatch. */
+const SIMILAR_SLOTS: Record<SlotKind, readonly SlotKind[]> = {
+  GK: [],
+  CB: ["CDM", "LB", "RB"],
+  LB: ["LWB", "CB"],
+  RB: ["RWB", "CB"],
+  LWB: ["LB", "LM"],
+  RWB: ["RB", "RM"],
+  CDM: ["CM", "CAM", "CB"],
+  CM: ["CAM", "CDM", "LM", "RM"],
+  CAM: ["CM", "CDM"],
+  LM: ["CM", "LW", "LWB"],
+  RM: ["CM", "RW", "RWB"],
+  LW: ["LM", "ST"],
+  RW: ["RM", "ST"],
+  ST: ["CAM", "LW", "RW"],
+};
+
+/** When the shape has no natural slot, these are the next-best homes at -1. */
+const FORMATION_COVER: Record<SlotKind, readonly SlotKind[]> = {
+  GK: [],
+  CB: ["CDM"],
+  LB: ["LWB", "CB"],
+  RB: ["RWB", "CB"],
+  LWB: ["LB", "LM", "LW"],
+  RWB: ["RB", "RM", "RW"],
+  CDM: ["CM", "CAM"],
+  CM: ["CAM", "CDM", "LM", "RM"],
+  CAM: ["CM", "ST"],
+  LM: ["LW", "LWB", "CM"],
+  RM: ["RW", "RWB", "CM"],
+  LW: ["LM", "LWB", "ST"],
+  RW: ["RM", "RWB", "ST"],
+  ST: ["CAM", "LW", "RW"],
+};
+
+export function groupFromSlot(kind: SlotKind): PositionGroup {
+  if (kind === "GK") return "GK";
+  if (kind === "CB" || kind === "LB" || kind === "RB" || kind === "LWB" || kind === "RWB") return "DEF";
+  if (kind === "LW" || kind === "RW" || kind === "ST") return "FWD";
+  return "MID";
+}
+
+function slotsAreSimilar(a: SlotKind, b: SlotKind): boolean {
+  return SIMILAR_SLOTS[a].includes(b) || SIMILAR_SLOTS[b].includes(a);
+}
+
+export function positionPenalty(
+  natural: SlotKind,
+  playing: SlotKind,
+  formation?: Formation,
+): number {
+  if (natural === playing) return 0;
+  if (natural === "GK" || playing === "GK") return -MAX_POSITION_PENALTY;
+  if (slotsAreSimilar(natural, playing)) return -1;
+
+  const kinds = formation ? formation.slots.map((slot) => slot.kind) : null;
+  if (kinds && !kinds.includes(natural) && kinds.includes(playing) && FORMATION_COVER[natural].includes(playing)) {
+    return -1;
+  }
+
+  const from = SLOT_AXIS[natural];
+  const to = SLOT_AXIS[playing];
+  let distance = Math.abs(from.line - to.line) * 1.7 + Math.abs(from.side - to.side) * 1.3;
+  const fromGroup = groupFromSlot(natural);
+  const toGroup = groupFromSlot(playing);
+  if ((fromGroup === "DEF" && toGroup === "FWD") || (fromGroup === "FWD" && toGroup === "DEF")) {
+    distance += 2.5;
+  } else if (fromGroup !== toGroup) {
+    distance += 1.2;
+  }
+  return -Math.min(MAX_POSITION_PENALTY, Math.max(2, Math.round(distance)));
+}
+
+export function effectiveOverall(player: PlayerSeason, playing: SlotKind, formation?: Formation): number {
+  return Math.max(1, Math.min(99, player.overall + positionPenalty(player.slot, playing, formation)));
+}
+
+export function playInSlot(player: PlayerSeason, playing: SlotKind, formation?: Formation): PlayerSeason {
+  return {
+    ...player,
+    overall: effectiveOverall(player, playing, formation),
+    slot: playing,
+    group: groupFromSlot(playing),
+  };
+}
+
+export function playerFitsSlot(_player: PlayerSeason, _kind: SlotKind): boolean {
+  return true;
 }
 
 export function compatibleSlotIds(
@@ -138,8 +227,14 @@ export function compatibleSlotIds(
   formation: Formation,
   xi: Record<string, PlayerSeason | null>,
 ): string[] {
+  const alreadyOnPitch = Object.values(xi).some((item) => item?.id === player.id);
   return formation.slots
-    .filter((slot) => xi[slot.id] === null && playerFitsSlot(player, slot.kind))
+    .filter((slot) => {
+      const occupant = xi[slot.id];
+      if (occupant?.id === player.id) return false;
+      if (alreadyOnPitch) return true;
+      return occupant === null;
+    })
     .map((slot) => slot.id);
 }
 
@@ -174,17 +269,17 @@ export function shortSeason(season: string): string {
 }
 
 export function ratingColor(overall: number): string {
-  if (overall >= 90) return "text-amber-300";
+  if (overall >= 92) return "text-amber-300";
   if (overall >= 85) return "text-emerald-300";
-  if (overall >= 80) return "text-sky-300";
-  if (overall >= 75) return "text-lime-300";
-  return "text-zinc-300";
+  if (overall >= 77) return "text-sky-300";
+  if (overall >= 67) return "text-yellow-300";
+  return "text-orange-400";
 }
 
 export function ratingBadge(overall: number): string {
-  if (overall >= 90) return "bg-amber-400 text-emerald-950";
+  if (overall >= 92) return "bg-amber-400 text-emerald-950";
   if (overall >= 85) return "bg-emerald-400 text-emerald-950";
-  if (overall >= 80) return "bg-sky-400 text-slate-950";
-  if (overall >= 75) return "bg-lime-400 text-lime-950";
-  return "bg-zinc-400 text-zinc-950";
+  if (overall >= 77) return "bg-sky-400 text-slate-950";
+  if (overall >= 67) return "bg-yellow-400 text-yellow-950";
+  return "bg-orange-400 text-orange-950";
 }

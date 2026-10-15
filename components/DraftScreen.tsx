@@ -12,7 +12,7 @@ import {
   shortSeason,
 } from "@/lib/formations";
 import { playerCanBePicked, REROLLS_PER_DRAFT } from "@/lib/draft";
-import type { DraftOffer, FormationId, PlayerSeason } from "@/lib/types";
+import type { DraftOffer, FormationId, PlayerSeason, SimMode } from "@/lib/types";
 import { Pitch } from "./Pitch";
 import { PlayerCard } from "./PlayerCard";
 
@@ -27,7 +27,7 @@ type Props = {
   onReroll: () => void;
   onSelectPlayer: (player: PlayerSeason | null) => void;
   onPlace: (target: { type: "xi"; slotId: string } | { type: "bench"; index: number }) => void;
-  onStartSeason: () => void;
+  onStartSeason: (mode: SimMode) => void;
 };
 
 export function DraftScreen({
@@ -56,6 +56,9 @@ export function DraftScreen({
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Draft · {teamName}</p>
             <h2 className="text-3xl font-black text-white">{formation.name}</h2>
+            <p className="mt-1 text-sm text-emerald-100/70">
+              Play anyone anywhere. Similar roles are −1; a true mismatch still drops up to 10.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div
@@ -80,6 +83,7 @@ export function DraftScreen({
               : null
           }
           highlightedSlotIds={highlight}
+          previewPlayer={selectedPlayer}
           onSlotClick={(slotId) => onPlace({ type: "xi", slotId })}
         />
         <div>
@@ -118,14 +122,34 @@ export function DraftScreen({
             })}
           </div>
         </div>
-        <button
-          type="button"
-          disabled={!complete}
-          onClick={onStartSeason}
-          className="w-full rounded-2xl bg-amber-300 py-3 text-sm font-black uppercase tracking-widest text-emerald-950 disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/40"
-        >
-          {complete ? "Simulate the season" : "Finish XI + 7-man bench to continue"}
-        </button>
+        {complete ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => onStartSeason("quick")}
+              className="rounded-2xl bg-amber-300 px-4 py-3 text-left text-emerald-950"
+            >
+              <div className="text-sm font-black uppercase tracking-widest">Quick sim</div>
+              <div className="mt-1 text-xs font-medium text-emerald-950/70">Play all 38 gameweeks at once</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => onStartSeason("match")}
+              className="rounded-2xl border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-left text-white"
+            >
+              <div className="text-sm font-black uppercase tracking-widest text-amber-200">Match by match</div>
+              <div className="mt-1 text-xs font-medium text-emerald-100/70">Watch each of your results, or skip ahead later</div>
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="w-full rounded-2xl bg-white/15 py-3 text-sm font-black uppercase tracking-widest text-white/40"
+          >
+            Finish XI + 7-man bench to continue
+          </button>
+        )}
       </section>
 
       <section className="rounded-3xl border border-white/10 bg-emerald-950/40 p-4">
