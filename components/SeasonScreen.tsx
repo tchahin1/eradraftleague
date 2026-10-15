@@ -412,7 +412,6 @@ export function SeasonScreen({
         ? "Kick off"
         : "Goal"
     : null;
-  const showWatchTheater = Boolean(watching && liveScore && (!watching.done || tab === "gameweek"));
 
   const gwMatches = useMemo(
     () => league.matches.filter((match) => match.gameweek === gameweek),
@@ -525,7 +524,7 @@ export function SeasonScreen({
         </section>
       ) : null}
 
-      {showWatchTheater ? (
+      {watching && liveScore && (!watching.done || tab === "gameweek") ? (
         <section className="rounded-3xl border border-amber-300/40 bg-emerald-950 p-8">
           <MatchSheet
             league={league}
