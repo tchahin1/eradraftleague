@@ -13,10 +13,10 @@ import {
   BENCH_SIZE,
   compatibleSlotIds,
   FORMATION_BY_ID,
-  ratingBadge,
 } from "@/lib/formations";
 import type { FormationId, GoalScorer, LeagueState, MatchResult, PlayerSeason } from "@/lib/types";
 import { Pitch } from "./Pitch";
+import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
 
 type WatchState = {
   match: MatchResult;
@@ -150,6 +150,29 @@ function MatchSheet({
   );
 }
 
+function playerMatchResult(match: MatchResult): "win" | "draw" | "loss" | null {
+  if (!isMatchPlayed(match)) return null;
+  const youAreHome = match.homeId === PLAYER_TEAM_ID;
+  const youAreAway = match.awayId === PLAYER_TEAM_ID;
+  if (!youAreHome && !youAreAway) return null;
+  const yours = youAreHome ? match.homeGoals : match.awayGoals;
+  const theirs = youAreHome ? match.awayGoals : match.homeGoals;
+  if (yours > theirs) return "win";
+  if (yours < theirs) return "loss";
+  return "draw";
+}
+
+function matchRowTone(match: MatchResult): string {
+  const result = playerMatchResult(match);
+  if (result === "win") return "border-lime-300/45 bg-lime-300/10";
+  if (result === "loss") return "border-rose-300/45 bg-rose-300/10";
+  if (result === "draw") return "border-white/55 bg-white/10";
+  if (match.homeId === PLAYER_TEAM_ID || match.awayId === PLAYER_TEAM_ID) {
+    return "border-amber-300/40 bg-amber-300/10";
+  }
+  return "border-white/10 bg-emerald-950/40";
+}
+
 function MatchRow({
   match,
   league,
@@ -161,11 +184,8 @@ function MatchRow({
 }) {
   const home = teamNameOf(league, match.homeId);
   const away = teamNameOf(league, match.awayId);
-  const yours = match.homeId === PLAYER_TEAM_ID || match.awayId === PLAYER_TEAM_ID;
   const played = isMatchPlayed(match);
-  const className = `grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
-    yours ? "border-amber-300/40 bg-amber-300/10" : "border-white/10 bg-emerald-950/40"
-  }`;
+  const className = `grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border px-3 py-2 text-sm ${matchRowTone(match)}`;
   const body = (
     <>
       <span className={`truncate text-right ${match.homeId === PLAYER_TEAM_ID ? "font-bold text-amber-200" : "text-white"}`}>
@@ -286,13 +306,14 @@ function LineupEditor({
                 }`}
               >
                 {player ? (
-                  <>
-                    <div className={`mb-1 inline-block rounded px-1 font-black ${ratingBadge(player.overall)}`}>
-                      {player.overall}
-                    </div>
-                    <div className="truncate font-semibold text-white">{player.name}</div>
-                    <div className="text-emerald-100/60">{player.slot}</div>
-                  </>
+                  <div className="flex items-center gap-2">
+                    <PlayerPortrait player={player} size="sm" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold text-white">{player.name}</span>
+                      <span className="text-emerald-100/60">{player.slot}</span>
+                    </span>
+                    <OverallBadge overall={player.overall} size="sm" />
+                  </div>
                 ) : (
                   <div className="text-emerald-100/50">Bench {index + 1}</div>
                 )}
@@ -463,20 +484,26 @@ export function SeasonScreen({
               ? `Match-by-match · ${total} gameweeks. Play your first fixture, or skip to the end.`
               : `Gameweek ${watching?.done || !watching ? played : watching.match.gameweek} of ${total} · ${ordinal(rank)} · ${you?.points ?? 0} pts`}
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {(["table", "gameweek", "mine"] as const).map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize ${
-                tab === id ? "bg-amber-300 text-emerald-950" : "bg-white/10 text-white"
-              }`}
-            >
-              {id === "mine" ? "My matches" : id}
-            </button>
-          ))}
-          <button type="button" onClick={onNewGame} className="rounded-full bg-white/10 px-4 py-1.5 text-sm text-white">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            {(["table", "gameweek", "mine"] as const).map((id) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold capitalize ${
+                  tab === id ? "bg-amber-300 text-emerald-950" : "bg-white/10 text-white"
+                }`}
+              >
+                {id === "mine" ? "My matches" : id}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={onNewGame}
+            className="rounded-full bg-amber-300 px-4 py-1.5 text-sm font-semibold text-emerald-950"
+          >
             New draft
           </button>
         </div>

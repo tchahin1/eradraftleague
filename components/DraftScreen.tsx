@@ -7,7 +7,6 @@ import {
   FORMATION_BY_ID,
   hasBackupGk,
   isDraftComplete,
-  ratingBadge,
   SQUAD_SIZE,
   shortSeason,
 } from "@/lib/formations";
@@ -15,6 +14,7 @@ import { playerCanBePicked, REROLLS_PER_DRAFT } from "@/lib/draft";
 import type { DraftOffer, FormationId, PlayerSeason, SimMode } from "@/lib/types";
 import { Pitch } from "./Pitch";
 import { PlayerCard } from "./PlayerCard";
+import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
 
 type Props = {
   teamName: string;
@@ -60,18 +60,8 @@ export function DraftScreen({
               Play anyone anywhere. Similar roles are −1; a true mismatch still drops up to 10.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div
-              className="flex items-center gap-2 rounded-full border border-amber-300/35 bg-amber-300/10 px-3 py-1.5"
-              aria-label={`${rerollsLeft} of ${REROLLS_PER_DRAFT} team rerolls left`}
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-300">Rerolls</span>
-              <RerollPips left={rerollsLeft} />
-              <span className="text-sm font-black tabular-nums text-white">{rerollsLeft}</span>
-            </div>
-            <div className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-emerald-100">
-              {filled}/{SQUAD_SIZE} picked
-            </div>
+          <div className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-emerald-100">
+            {filled}/{SQUAD_SIZE} picked
           </div>
         </div>
         <Pitch
@@ -91,7 +81,7 @@ export function DraftScreen({
             <span>Bench</span>
             {!hasBackupGk(bench) ? <span className="text-amber-300">Need a backup GK</span> : null}
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {Array.from({ length: BENCH_SIZE }, (_, index) => {
               const player = bench[index];
               const canBench = Boolean(selectedPlayer);
@@ -107,13 +97,14 @@ export function DraftScreen({
                   }`}
                 >
                   {player ? (
-                    <>
-                      <div className={`mb-1 inline-block rounded px-1 font-black ${ratingBadge(player.overall)}`}>
-                        {player.overall}
-                      </div>
-                      <div className="truncate font-semibold text-white">{player.name}</div>
-                      <div className="text-emerald-100/60">{player.slot}</div>
-                    </>
+                    <div className="flex items-center gap-2">
+                      <PlayerPortrait player={player} size="sm" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold text-white">{player.name}</span>
+                        <span className="text-emerald-100/60">{player.slot}</span>
+                      </span>
+                      <OverallBadge overall={player.overall} size="sm" />
+                    </div>
                   ) : (
                     <div className="text-emerald-100/50">Bench {index + 1}</div>
                   )}

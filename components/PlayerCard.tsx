@@ -1,7 +1,8 @@
 "use client";
 
-import { ratingBadge, shortSeason } from "@/lib/formations";
+import { shortSeason } from "@/lib/formations";
 import type { PlayerSeason } from "@/lib/types";
+import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
 
 type Props = {
   player: PlayerSeason;
@@ -24,9 +25,7 @@ export function PlayerCard({ player, disabled, selected, onClick }: Props) {
             : "border-white/10 bg-emerald-950/60 hover:border-amber-300/60 hover:bg-emerald-900/80"
       }`}
     >
-      <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm font-black ${ratingBadge(player.overall)}`}>
-        {player.overall}
-      </span>
+      <PlayerPortrait player={player} size="sm" />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-semibold text-white">{player.name}</span>
         <span className="block text-xs text-emerald-100/70">
@@ -34,6 +33,7 @@ export function PlayerCard({ player, disabled, selected, onClick }: Props) {
           {player.ratingSource === "fifa" ? " · FIFA" : ""}
         </span>
       </span>
+      <OverallBadge overall={player.overall} />
     </button>
   );
 }

@@ -802,6 +802,12 @@ def main() -> int:
     OUT_PUBLIC.write_text(text)
     log(f"Wrote {OUT_DATA}")
     log(f"Wrote {OUT_PUBLIC}")
+    try:
+        from player_photos import build_photos, write_photos
+
+        write_photos(build_photos(records))
+    except Exception as exc:  # noqa: BLE001
+        log(f"WARNING player photos skipped: {exc}")
     return 0
 
 

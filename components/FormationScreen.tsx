@@ -41,10 +41,11 @@ export function FormationScreen({ teamName, onTeamName, onChoose }: Props) {
               <span className="text-2xl font-black text-white">{formation.name}</span>
               <span className="text-xs uppercase tracking-widest text-amber-300">select</span>
             </div>
-            <div className="pointer-events-none max-h-72 overflow-hidden rounded-2xl">
+            <div className="pointer-events-none mx-auto w-full max-w-[18rem] overflow-hidden rounded-2xl">
               <Pitch
                 formationId={formation.id}
                 interactive={false}
+                preview
                 xi={Object.fromEntries(FORMATION_BY_ID[formation.id].slots.map((s) => [s.id, null]))}
               />
             </div>

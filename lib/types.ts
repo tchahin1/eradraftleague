@@ -31,6 +31,7 @@ export type PlayerSeason = {
   ratingSource: RatingSource;
   nationality: string;
   minutes: number;
+  photoUrl?: string;
 };
 
 export type FormationId = "433" | "442" | "4231" | "352" | "541" | "343";

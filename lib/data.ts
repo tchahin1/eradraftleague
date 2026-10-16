@@ -1,3 +1,4 @@
+import { attachPhotoUrls } from "./photos";
 import type { PlayerSeason } from "./types";
 
 type DatasetFile = {
@@ -6,15 +7,27 @@ type DatasetFile = {
   players: PlayerSeason[];
 };
 
+type PhotoFile = {
+  photos?: Record<string, string>;
+};
+
 export async function loadDataset(): Promise<PlayerSeason[]> {
-  const response = await fetch("/data/epl-player-seasons.json");
-  if (!response.ok) {
+  const [playersRes, photosRes] = await Promise.all([
+    fetch("/data/epl-player-seasons.json"),
+    fetch("/data/player-photos.json"),
+  ]);
+  if (!playersRes.ok) {
     throw new Error("Could not load Premier League player data. Run scripts/ingest_epl.py first.");
   }
-  const json = (await response.json()) as DatasetFile | PlayerSeason[];
+  const json = (await playersRes.json()) as DatasetFile | PlayerSeason[];
   const players = Array.isArray(json) ? json : json.players;
   if (!players?.length) {
     throw new Error("Player database is empty. Run scripts/ingest_epl.py to build it.");
   }
-  return players;
+  let photos: Record<string, string> | undefined;
+  if (photosRes.ok) {
+    const photoJson = (await photosRes.json()) as PhotoFile | Record<string, string>;
+    photos = "photos" in photoJson && photoJson.photos ? photoJson.photos : (photoJson as Record<string, string>);
+  }
+  return attachPhotoUrls(players, photos);
 }

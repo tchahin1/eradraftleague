@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "ingest": "python3 scripts/ingest_epl.py"
+    "ingest": "python3 scripts/ingest_epl.py",
+    "photos": "python3 scripts/player_photos.py"
   },
   "dependencies": {
     "next": "16.4.0",
