@@ -8,6 +8,7 @@ type DatasetFile = {
 };
 
 type PhotoFile = {
+  generatedAt?: string;
   photos?: Record<string, string>;
 };
 
@@ -26,8 +27,8 @@ export async function loadDataset(): Promise<PlayerSeason[]> {
   }
   let photos: Record<string, string> | undefined;
   if (photosRes.ok) {
-    const photoJson = (await photosRes.json()) as PhotoFile | Record<string, string>;
-    photos = "photos" in photoJson && photoJson.photos ? photoJson.photos : (photoJson as Record<string, string>);
+    const photoJson = (await photosRes.json()) as PhotoFile;
+    photos = photoJson.photos;
   }
   return attachPhotoUrls(players, photos);
 }
