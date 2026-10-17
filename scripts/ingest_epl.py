@@ -3,8 +3,10 @@
 
 Primary source: Transfermarkt open dataset (appearances in GB1, 2000-2026).
 Fallbacks: ewenme Transfermarkt squad CSVs (2004-2020) and FPL (2016-2026).
-Ratings: FIFA-style overlay for iconic player-seasons, otherwise estimated
-from minutes, output, and (when present) market value.
+Ratings: FIFA overlays for iconic player-seasons; otherwise a FIFA-like
+estimate from minutes, output, market value, and club quality. Squad-list
+rows with no stats (ewenme) use club strength, squad order, age, and
+career carry-forward so regulars are not flattened to ~64.
 """
 
 from __future__ import annotations
@@ -329,6 +331,50 @@ FIFA_OVERLAY = {
     ("alexander isak", 2024): 87,
     ("bruno guimaraes", 2024): 86,
     ("anthony gordon", 2024): 84,
+    ("sami hyypia", 2001): 85,
+    ("sami hyypia", 2005): 84,
+    ("jamie carragher", 2005): 83,
+    ("jamie carragher", 2008): 84,
+    ("ricardo carvalho", 2005): 86,
+    ("william gallas", 2005): 84,
+    ("patrice evra", 2008): 86,
+    ("edwin van der sar", 2010): 86,
+    ("rio ferdinand", 2010): 86,
+    ("nemanja vidic", 2010): 87,
+    ("daniel agger", 2008): 83,
+    ("dirk kuyt", 2008): 83,
+    ("michael carrick", 2008): 83,
+    ("gary neville", 2006): 83,
+    ("ledley king", 2008): 84,
+    ("kolo toure", 2005): 84,
+    ("joe hart", 2011): 84,
+    ("paulo ferreira", 2005): 81,
+    ("branislav ivanovic", 2010): 83,
+    ("lucas leiva", 2010): 81,
+    ("martin skrtel", 2012): 81,
+    ("nani", 2010): 84,
+    ("park ji sung", 2008): 82,
+    ("emmanuel adebayor", 2008): 84,
+    ("samir nasri", 2010): 84,
+    ("bacary sagna", 2008): 82,
+    ("gael clichy", 2008): 82,
+    ("michael ballack", 2008): 85,
+    ("nicolas anelka", 2009): 84,
+    ("florent malouda", 2009): 83,
+    ("pablo zabaleta", 2012): 82,
+    ("joleon lescott", 2011): 82,
+    ("alvaro arbeloa", 2008): 80,
+    ("eidur gudjohnsen", 2005): 83,
+    ("carlo cudicini", 2005): 80,
+    ("wes brown", 2007): 80,
+    ("john o shea", 2008): 79,
+    ("john oshea", 2008): 79,
+    ("anderson", 2008): 80,
+    ("nemanja vidic", 2006): 84,
+    ("pepe reina", 2010): 85,
+    ("yossi benayoun", 2009): 81,
+    ("ryan babel", 2008): 80,
+    ("fabio aurelio", 2008): 80,
 }
 
 
@@ -394,6 +440,94 @@ def percentile_rank(series: pd.Series) -> pd.Series:
     return series.rank(method="average", pct=True).fillna(0.35)
 
 
+ELITE_CLUBS = {"arsenal", "chelsea", "liverpool", "manchester-united"}
+SLOT_RANK_ADJ = {
+    "GK": (4, -1, -7, -12),
+    "CB": (3, 2, 0, -3, -7),
+    "LB": (2, -2, -7),
+    "RB": (2, -2, -7),
+    "LWB": (2, -2, -7),
+    "RWB": (2, -2, -7),
+    "CDM": (3, 0, -4, -8),
+    "CM": (3, 1, -2, -6),
+    "CAM": (3, -1, -6),
+    "LM": (2, -2, -7),
+    "RM": (2, -2, -7),
+    "LW": (3, -1, -6),
+    "RW": (3, -1, -6),
+    "ST": (3, 0, -4, -8),
+}
+
+
+def club_tier(club: str, year: int) -> int:
+    """0–5 scale used when a squad list has no minutes or market value."""
+    key = club_key(club)
+    if key in ELITE_CLUBS:
+        if key == "liverpool" and 2011 <= year <= 2016:
+            return 4
+        if key == "arsenal" and year >= 2018:
+            return 4
+        if key == "manchester-united" and year >= 2014:
+            return 4
+        return 5
+    if key == "manchester-city":
+        if year >= 2011:
+            return 5
+        if year >= 2008:
+            return 3
+        return 2
+    if key == "tottenham-hotspur":
+        return 4 if year >= 2015 else 3
+    if key == "leicester-city" and year == 2015:
+        return 4
+    if key in {"everton", "aston-villa"} and year <= 2010:
+        return 3
+    if key == "newcastle-united" and year <= 2005:
+        return 3
+    return 2
+
+
+def is_dummy_stats(row: pd.Series | dict) -> bool:
+    source = str(row.get("source") or "")
+    if source == "ewenme":
+        return True
+    minutes = float(row.get("minutes") or 0)
+    goals = float(row.get("goals") or 0)
+    value = float(row.get("market_value") or 0)
+    return minutes == 1500 and goals == 0 and value <= 0
+
+
+def estimate_from_squad_list(row: pd.Series, fringe: bool = False) -> int:
+    year = int(row.get("season_start") or 2010)
+    tier = club_tier(str(row.get("club") or ""), year)
+    base = 71 + tier * 2
+    slot = str(row.get("slot") or "CM")
+    order = int(row.get("slot_order") or 0)
+    bonuses = SLOT_RANK_ADJ.get(slot, (1, -2, -6))
+    adj = bonuses[min(order, len(bonuses) - 1)]
+    age = float(row.get("age") or 25)
+    if pd.isna(age):
+        age = 25
+    if age < 18:
+        adj -= 10
+    elif age < 20:
+        adj -= 6
+    elif age < 21:
+        adj -= 3
+    elif age > 36:
+        adj -= 4
+    elif age > 34:
+        adj -= 2
+    score = int(max(60, min(86, round(base + adj))))
+    if age < 19:
+        score = min(score, 66)
+    elif age < 21:
+        score = min(score, 72)
+    if fringe:
+        score = min(score, 68 if age >= 21 else 64)
+    return score
+
+
 def estimate_overall(row: pd.Series) -> int:
     minutes = float(row.get("minutes") or 0)
     goals = float(row.get("goals") or 0)
@@ -401,38 +535,85 @@ def estimate_overall(row: pd.Series) -> int:
     apps = float(row.get("apps") or 0)
     value_pct = float(row.get("value_pct") or 0.4)
     minutes_pct = float(row.get("minutes_pct") or 0.4)
+    club_pct = float(row.get("club_pct") or 0.4)
     group = row.get("group") or "MID"
+    market_value = float(row.get("market_value") or 0)
 
-    score = 50 + 18 * value_pct + 8 * minutes_pct
+    if market_value <= 0:
+        value_pct = 0.45
+        club_pct = 0.4
+
+    score = 62 + 14 * value_pct + 7 * minutes_pct + 2.5 * club_pct
     if group == "FWD":
-        score += min(5, goals * 0.18 + assists * 0.12)
+        score += min(6.0, goals * 0.22 + assists * 0.14)
     elif group == "MID":
-        score += min(4, goals * 0.14 + assists * 0.14)
+        score += min(5.0, goals * 0.18 + assists * 0.18)
     elif group == "DEF":
-        score += min(3, apps * 0.03)
+        score += min(3.5, apps * 0.04 + goals * 0.25)
     elif group == "GK":
-        score += min(3, apps * 0.04)
+        score += min(3.5, apps * 0.05)
 
     if minutes < 180:
         score -= 8
+    elif minutes < 450:
+        score -= 5
     elif minutes < 900:
-        score -= 4
+        score -= 3
     elif minutes >= 2700:
         score += 1
 
-    return int(max(52, min(86, round(score))))
+    return int(max(58, min(88, round(score))))
 
 
 def apply_fifa_overlay(name: str, season_start: int, estimated: int) -> tuple[int, str]:
-    key = (norm_text(name), int(season_start))
-    if key in FIFA_OVERLAY:
-        return FIFA_OVERLAY[key], "fifa"
-    # Allow nearby season for the same icon
-    for delta in (-1, 1):
-        nearby = (key[0], key[1] + delta)
-        if nearby in FIFA_OVERLAY:
-            return max(estimated, FIFA_OVERLAY[nearby] - 2), "fifa"
+    name_key = norm_text(name)
+    matches = [(year, overall) for (n, year), overall in FIFA_OVERLAY.items() if n == name_key]
+    if not matches:
+        return estimated, "estimated"
+    year, overall = min(matches, key=lambda item: (abs(item[0] - season_start), -item[1]))
+    delta = abs(int(year) - int(season_start))
+    if delta == 0:
+        return int(overall), "fifa"
+    faded = int(overall) - delta
+    if delta <= 3:
+        return max(estimated, faded), "fifa"
+    if delta <= 6:
+        return max(estimated, faded), "estimated"
     return estimated, "estimated"
+
+
+def apply_career_floors(records: list[dict]) -> list[dict]:
+    """Keep established regulars from collapsing in squad-list-only years.
+
+    Only look a few seasons backward. Future peaks are not projected onto
+    earlier youth seasons (e.g. Pogba 2010 should not inherit 2017).
+    """
+    by_player: dict[str, list[dict]] = {}
+    for record in records:
+        by_player.setdefault(record["playerId"], []).append(record)
+
+    for items in by_player.values():
+        items.sort(key=lambda r: r["season"])
+        anchors: list[tuple[int, int]] = []
+        for record in items:
+            year = int(record["season"][:4])
+            dummy = int(record.get("minutes") or 0) == 1500
+            if record["ratingSource"] == "fifa" or not dummy:
+                anchors.append((year, int(record["overall"])))
+        if not anchors:
+            continue
+        for record in items:
+            if int(record.get("minutes") or 0) != 1500:
+                continue
+            year = int(record["season"][:4])
+            floor = int(record["overall"])
+            before = [anchor for anchor in anchors if 0 <= year - anchor[0] <= 4]
+            if before:
+                anchor_year, overall = before[-1]
+                floor = max(floor, overall - (year - anchor_year))
+            if floor > record["overall"]:
+                record["overall"] = int(min(89, floor))
+    return records
 
 
 def load_transfermarkt() -> pd.DataFrame | None:
@@ -598,6 +779,8 @@ def load_ewenme() -> pd.DataFrame | None:
     df["group"] = mapped.map(lambda t: t[1])
     df["club"] = df["club_name"].map(club_name)
     df["name"] = df["player_name"]
+    df["age"] = pd.to_numeric(df.get("age"), errors="coerce")
+    df["slot_order"] = df.groupby(["season_start", "club", "slot"]).cumcount()
     df["minutes"] = 1500
     df["goals"] = 0
     df["assists"] = 0
@@ -622,6 +805,8 @@ def load_ewenme() -> pd.DataFrame | None:
             "market_value",
             "nationality",
             "source",
+            "age",
+            "slot_order",
         ]
     ]
 
@@ -716,16 +901,28 @@ def merge_sources(frames: list[pd.DataFrame]) -> pd.DataFrame:
 
 def to_records(df: pd.DataFrame) -> list[dict]:
     df = df.copy()
+    if "club_key" not in df.columns:
+        df["club_key"] = df["club"].map(club_key)
     df["value_pct"] = df.groupby("season_start")["market_value"].transform(percentile_rank)
     df["minutes_pct"] = df.groupby("season_start")["minutes"].transform(percentile_rank)
+    df["club_value"] = df.groupby(["season_start", "club_key"])["market_value"].transform("median")
+    df["club_pct"] = df.groupby("season_start")["club_value"].transform(percentile_rank)
+    covered_seasons = set(
+        int(year)
+        for year in df.loc[df["source"].isin(["transfermarkt", "fpl"]), "season_start"].unique()
+    )
 
     records = []
     for data in df.to_dict("records"):
-        if pd.notna(data.get("forced_overall")) and data.get("source") == "early-era":
+        source = str(data.get("source") or "")
+        if pd.notna(data.get("forced_overall")) and source == "early-era":
             estimated = int(data["forced_overall"])
+        elif is_dummy_stats(data):
+            fringe = int(data["season_start"]) in covered_seasons
+            estimated = estimate_from_squad_list(pd.Series(data), fringe=fringe)
         else:
             estimated = estimate_overall(pd.Series(data))
-        overall, source = apply_fifa_overlay(str(data["name"]), int(data["season_start"]), estimated)
+        overall, rating_source = apply_fifa_overlay(str(data["name"]), int(data["season_start"]), estimated)
         season = season_label(int(data["season_start"]))
         player_id = "nm-" + re.sub(r"[^a-z0-9]+", "-", norm_text(str(data["name"])))
         club = club_name(str(data["club"]))
@@ -740,11 +937,12 @@ def to_records(df: pd.DataFrame) -> list[dict]:
                 "slot": str(data["slot"]),
                 "group": str(data["group"]),
                 "overall": int(overall),
-                "ratingSource": source,
+                "ratingSource": rating_source,
                 "nationality": "" if pd.isna(data.get("nationality")) else str(data.get("nationality") or ""),
                 "minutes": int(float(data.get("minutes") or 0)),
             }
         )
+    records = apply_career_floors(records)
     records.sort(key=lambda r: (r["season"], r["club"], -r["overall"], r["name"]))
     return records
 
@@ -791,7 +989,8 @@ def main() -> int:
         "sourceNotes": [
             "Premier League player-seasons 2000-01 to 2025-26",
             "Squads from Transfermarkt appearances (GB1), with FPL and ewenme fallbacks",
-            "Ratings are FIFA overlays where listed, otherwise estimated from minutes/output/value",
+            "Ratings are FIFA overlays where listed; otherwise FIFA-like estimates from minutes, output, value, and club quality",
+            "Squad-list seasons without stats use club strength, squad order, age, and career carry-forward",
         ],
         "players": records,
     }
@@ -803,9 +1002,13 @@ def main() -> int:
     log(f"Wrote {OUT_DATA}")
     log(f"Wrote {OUT_PUBLIC}")
     try:
-        from player_photos import build_photos, write_photos
+        photo_out = ROOT / "public" / "data" / "player-photos.json"
+        if photo_out.exists() and photo_out.stat().st_size > 1000:
+            log("Player photos already present; skipping rebuild")
+        else:
+            from player_photos import build_photos, write_photos
 
-        write_photos(build_photos(records))
+            write_photos(build_photos(records))
     except Exception as exc:  # noqa: BLE001
         log(f"WARNING player photos skipped: {exc}")
     return 0
