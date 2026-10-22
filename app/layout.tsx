@@ -15,13 +15,13 @@ const sans = DM_Sans({
 
 export const metadata: Metadata = {
   title: "Era Draft League",
-  description: "Draft a Premier League XI from random club-seasons and win a fictional title race.",
+  description: "Draft an XI from random club-seasons in Europe's top five leagues and win a fictional title race.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[#07140c] font-sans text-emerald-50">{children}</body>
+    <html lang="en" data-league="epl" className={`${display.variable} ${sans.variable} h-full antialiased`}>
+      <body className="min-h-full font-sans text-emerald-50">{children}</body>
     </html>
   );
 }

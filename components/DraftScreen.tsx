@@ -18,6 +18,8 @@ import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
 
 type Props = {
   teamName: string;
+  leagueName: string;
+  gameweeks: number;
   formationId: FormationId;
   xi: Record<string, PlayerSeason | null>;
   bench: (PlayerSeason | null)[];
@@ -32,6 +34,8 @@ type Props = {
 
 export function DraftScreen({
   teamName,
+  leagueName,
+  gameweeks,
   formationId,
   xi,
   bench,
@@ -54,7 +58,9 @@ export function DraftScreen({
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Draft · {teamName}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">
+              {leagueName} draft · {teamName}
+            </p>
             <h2 className="text-3xl font-black text-white">{formation.name}</h2>
             <p className="mt-1 text-sm text-emerald-100/70">
               Play anyone anywhere. Similar roles are −1; a true mismatch still drops up to 10.
@@ -121,7 +127,9 @@ export function DraftScreen({
               className="rounded-2xl bg-amber-300 px-4 py-3 text-left text-emerald-950"
             >
               <div className="text-sm font-black uppercase tracking-widest">Quick sim</div>
-              <div className="mt-1 text-xs font-medium text-emerald-950/70">Play all 38 gameweeks at once</div>
+              <div className="mt-1 text-xs font-medium text-emerald-950/70">
+                Play all {gameweeks} gameweeks at once
+              </div>
             </button>
             <button
               type="button"

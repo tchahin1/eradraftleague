@@ -6,15 +6,22 @@ import type { FormationId } from "@/lib/types";
 
 type Props = {
   teamName: string;
+  leagueName: string;
   onTeamName: (value: string) => void;
   onChoose: (id: FormationId) => void;
+  onBack: () => void;
 };
 
-export function FormationScreen({ teamName, onTeamName, onChoose }: Props) {
+export function FormationScreen({ teamName, leagueName, onTeamName, onChoose, onBack }: Props) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
       <header className="space-y-3 text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Step 1</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">
+          {leagueName} · Step 1
+        </p>
+        <button type="button" onClick={onBack} className="text-sm text-emerald-100/70 underline-offset-4 hover:underline">
+          Change league
+        </button>
         <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">Pick your shape</h1>
         <p className="mx-auto max-w-xl text-emerald-100/75">
           Formation locks your eleven pitch slots. Anyone can play anywhere. Similar roles (CM into CAM or CDM) are only −1, especially when this shape has no natural slot for them. A true mismatch still drops up to 10. You will still draft a seven-man bench, including a backup goalkeeper.

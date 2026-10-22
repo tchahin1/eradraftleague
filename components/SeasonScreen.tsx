@@ -26,6 +26,7 @@ type WatchState = {
 
 type Props = {
   teamName: string;
+  leagueName: string;
   league: LeagueState;
   formationId?: FormationId | null;
   xi?: Record<string, PlayerSeason | null>;
@@ -368,6 +369,7 @@ function MatchActions({
 
 export function SeasonScreen({
   teamName,
+  leagueName,
   league,
   formationId,
   xi,
@@ -473,7 +475,9 @@ export function SeasonScreen({
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
       <header className="rounded-3xl border border-white/10 bg-emerald-950/50 p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">Fictional Premier League</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">
+          Fictional {leagueName}
+        </p>
         <h1 className="mt-2 text-4xl font-black text-white">{teamName}</h1>
         <p className="mt-2 text-lg text-emerald-100/80">
           {showFinal

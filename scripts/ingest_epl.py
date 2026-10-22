@@ -23,6 +23,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from early_era_squads import EARLY_SEASONS  # noqa: E402
+from fifa_overlays import BIG5_OVERLAY  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = Path(__file__).resolve().parent / ".cache"
@@ -34,6 +35,86 @@ EWENME_BASE = "https://raw.githubusercontent.com/ewenme/squads/master/data"
 FPL_BASE = "https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data"
 
 SEASON_STARTS = list(range(2000, 2026))  # 2000-01 through 2025-26
+
+LEAGUE_DEFS = [
+    {
+        "id": "epl",
+        "name": "Premier League",
+        "competition_id": "GB1",
+        "filename": "epl-player-seasons.json",
+        "min_clubs": 18,
+        "use_early_era": True,
+        "use_fpl": True,
+        "ewenme_file": "premier_league.csv",
+        "notes": [
+            "Premier League player-seasons 2000-01 to 2025-26",
+            "Squads from Transfermarkt appearances (GB1), with FPL and ewenme fallbacks",
+            "Ratings are FIFA overlays where listed; otherwise FIFA-like estimates from minutes, output, value, and club quality",
+            "Squad-list seasons without stats use club strength, squad order, age, and career carry-forward",
+        ],
+    },
+    {
+        "id": "laliga",
+        "name": "La Liga",
+        "competition_id": "ES1",
+        "filename": "laliga-player-seasons.json",
+        "min_clubs": 18,
+        "use_early_era": False,
+        "use_fpl": False,
+        "ewenme_file": "primera_division.csv",
+        "notes": [
+            "La Liga player-seasons 2004-05 to 2025-26",
+            "Squads from Transfermarkt appearances (ES1) from 2012, with ewenme squad lists for 2004-2020",
+            "Ratings are FIFA overlays where listed; otherwise FIFA-like estimates from minutes, output, value, and club quality",
+        ],
+    },
+    {
+        "id": "seriea",
+        "name": "Serie A",
+        "competition_id": "IT1",
+        "filename": "seriea-player-seasons.json",
+        "min_clubs": 18,
+        "use_early_era": False,
+        "use_fpl": False,
+        "ewenme_file": "serie_a.csv",
+        "notes": [
+            "Serie A player-seasons 2004-05 to 2025-26",
+            "Squads from Transfermarkt appearances (IT1) from 2012, with ewenme squad lists for 2004-2020",
+            "Ratings are FIFA overlays where listed; otherwise FIFA-like estimates from minutes, output, value, and club quality",
+        ],
+    },
+    {
+        "id": "bundesliga",
+        "name": "Bundesliga",
+        "competition_id": "L1",
+        "filename": "bundesliga-player-seasons.json",
+        "min_clubs": 16,
+        "use_early_era": False,
+        "use_fpl": False,
+        "ewenme_file": "1_bundesliga.csv",
+        "notes": [
+            "Bundesliga player-seasons 2004-05 to 2025-26",
+            "Squads from Transfermarkt appearances (L1) from 2012, with ewenme squad lists for 2004-2020",
+            "Ratings are FIFA overlays where listed; otherwise FIFA-like estimates from minutes, output, value, and club quality",
+        ],
+    },
+    {
+        "id": "ligue1",
+        "name": "Ligue 1",
+        "competition_id": "FR1",
+        "filename": "ligue1-player-seasons.json",
+        "min_clubs": 16,
+        "use_early_era": False,
+        "use_fpl": False,
+        "ewenme_file": "ligue_1.csv",
+        "notes": [
+            "Ligue 1 player-seasons 2004-05 to 2025-26",
+            "Squads from Transfermarkt appearances (FR1) from 2012, with ewenme squad lists for 2004-2020",
+            "Ratings are FIFA overlays where listed; otherwise FIFA-like estimates from minutes, output, value, and club quality",
+        ],
+    },
+]
+TM_COMPETITION_IDS = {str(item["competition_id"]) for item in LEAGUE_DEFS}
 
 CLUB_ALIASES = {
     "man utd": "Manchester United",
@@ -131,6 +212,256 @@ CLUB_ALIASES = {
     "barnsley": "Barnsley",
     "blackpool": "Blackpool",
     "middlesboro": "Middlesbrough",
+    "barcelona": "Barcelona",
+    "fc barcelona": "Barcelona",
+    "real madrid": "Real Madrid",
+    "real madrid cf": "Real Madrid",
+    "atletico madrid": "Atlético Madrid",
+    "atletico de madrid": "Atlético Madrid",
+    "club atletico de madrid": "Atlético Madrid",
+    "athletic club": "Athletic Club",
+    "athletic bilbao": "Athletic Club",
+    "real sociedad": "Real Sociedad",
+    "real betis": "Real Betis",
+    "real betis balompie": "Real Betis",
+    "villarreal": "Villarreal",
+    "villarreal cf": "Villarreal",
+    "valencia": "Valencia",
+    "valencia cf": "Valencia",
+    "sevilla": "Sevilla",
+    "sevilla fc": "Sevilla",
+    "celta vigo": "Celta Vigo",
+    "rc celta": "Celta Vigo",
+    "rc celta de vigo": "Celta Vigo",
+    "celta de vigo": "Celta Vigo",
+    "espanyol": "Espanyol",
+    "rcd espanyol": "Espanyol",
+    "espanyol barcelona": "Espanyol",
+    "rcd espanyol de barcelona": "Espanyol",
+    "getafe": "Getafe",
+    "getafe cf": "Getafe",
+    "osasuna": "Osasuna",
+    "ca osasuna": "Osasuna",
+    "mallorca": "Mallorca",
+    "rcd mallorca": "Mallorca",
+    "rayo vallecano": "Rayo Vallecano",
+    "levante": "Levante",
+    "levante ud": "Levante",
+    "alaves": "Alavés",
+    "deportivo alaves": "Alavés",
+    "deportivo": "Deportivo La Coruña",
+    "deportivo de la coruna": "Deportivo La Coruña",
+    "deportivo la coruna": "Deportivo La Coruña",
+    "malaga": "Málaga",
+    "malaga cf": "Málaga",
+    "granada": "Granada",
+    "granada cf": "Granada",
+    "girona": "Girona",
+    "girona fc": "Girona",
+    "las palmas": "Las Palmas",
+    "ud las palmas": "Las Palmas",
+    "cadiz": "Cádiz",
+    "cadiz cf": "Cádiz",
+    "elche": "Elche",
+    "elche cf": "Elche",
+    "leganes": "Leganés",
+    "cd leganes": "Leganés",
+    "valladolid": "Valladolid",
+    "real valladolid": "Valladolid",
+    "real zaragoza": "Zaragoza",
+    "zaragoza": "Zaragoza",
+    "racing santander": "Racing Santander",
+    "sporting gijon": "Sporting Gijón",
+    "real sporting de gijon": "Sporting Gijón",
+    "juventus": "Juventus",
+    "juventus fc": "Juventus",
+    "inter": "Inter",
+    "internazionale": "Inter",
+    "fc internazionale": "Inter",
+    "fc internazionale milano": "Inter",
+    "inter milan": "Inter",
+    "milan": "Milan",
+    "ac milan": "Milan",
+    "roma": "Roma",
+    "as roma": "Roma",
+    "associazione sportiva roma": "Roma",
+    "lazio": "Lazio",
+    "ss lazio": "Lazio",
+    "societa sportiva lazio": "Lazio",
+    "societa sportiva lazio s p a": "Lazio",
+    "societa sportiva lazio spa": "Lazio",
+    "napoli": "Napoli",
+    "ssc napoli": "Napoli",
+    "fiorentina": "Fiorentina",
+    "acf fiorentina": "Fiorentina",
+    "atalanta": "Atalanta",
+    "atalanta bc": "Atalanta",
+    "torino": "Torino",
+    "torino fc": "Torino",
+    "bologna": "Bologna",
+    "bologna fc 1909": "Bologna",
+    "bologna football club 1909": "Bologna",
+    "udinese": "Udinese",
+    "udinese calcio": "Udinese",
+    "sampdoria": "Sampdoria",
+    "uc sampdoria": "Sampdoria",
+    "genoa": "Genoa",
+    "genoa cfc": "Genoa",
+    "cagliari": "Cagliari",
+    "cagliari calcio": "Cagliari",
+    "catania": "Catania",
+    "calcio catania": "Catania",
+    "sassuolo": "Sassuolo",
+    "us sassuolo": "Sassuolo",
+    "empoli": "Empoli",
+    "empoli fc": "Empoli",
+    "parma": "Parma",
+    "parma calcio 1913": "Parma",
+    "parma fc": "Parma",
+    "hellas verona": "Hellas Verona",
+    "hellas verona fc": "Hellas Verona",
+    "verona": "Hellas Verona",
+    "lecce": "Lecce",
+    "us lecce": "Lecce",
+    "salernitana": "Salernitana",
+    "us salernitana 1919": "Salernitana",
+    "monza": "Monza",
+    "ac monza": "Monza",
+    "como": "Como",
+    "como 1907": "Como",
+    "venezia": "Venezia",
+    "venezia fc": "Venezia",
+    "palermo": "Palermo",
+    "us palermo": "Palermo",
+    "siena": "Siena",
+    "ac siena": "Siena",
+    "chievo": "Chievo",
+    "ac chievo verona": "Chievo",
+    "brescia": "Brescia",
+    "brescia calcio": "Brescia",
+    "bayern munich": "Bayern Munich",
+    "bayern munchen": "Bayern Munich",
+    "fc bayern munich": "Bayern Munich",
+    "fc bayern munchen": "Bayern Munich",
+    "borussia dortmund": "Borussia Dortmund",
+    "bvb": "Borussia Dortmund",
+    "bayer leverkusen": "Bayer Leverkusen",
+    "bayer 04 leverkusen": "Bayer Leverkusen",
+    "rb leipzig": "RB Leipzig",
+    "rasenballsport leipzig": "RB Leipzig",
+    "leipzig": "RB Leipzig",
+    "borussia monchengladbach": "Borussia Mönchengladbach",
+    "borussia moenchengladbach": "Borussia Mönchengladbach",
+    "gladbach": "Borussia Mönchengladbach",
+    "eintracht frankfurt": "Eintracht Frankfurt",
+    "wolfsburg": "Wolfsburg",
+    "vfl wolfsburg": "Wolfsburg",
+    "hoffenheim": "Hoffenheim",
+    "tsg 1899 hoffenheim": "Hoffenheim",
+    "tsg hoffenheim": "Hoffenheim",
+    "freiburg": "Freiburg",
+    "sc freiburg": "Freiburg",
+    "union berlin": "Union Berlin",
+    "1 fc union berlin": "Union Berlin",
+    "fc union berlin": "Union Berlin",
+    "mainz": "Mainz",
+    "1 fsv mainz 05": "Mainz",
+    "mainz 05": "Mainz",
+    "augsburg": "Augsburg",
+    "fc augsburg": "Augsburg",
+    "heidenheim": "Heidenheim",
+    "1 fc heidenheim": "Heidenheim",
+    "1 fc heidenheim 1846": "Heidenheim",
+    "1 fussballclub heidenheim 1846": "Heidenheim",
+    "stuttgart": "Stuttgart",
+    "vfb stuttgart": "Stuttgart",
+    "werder bremen": "Werder Bremen",
+    "sv werder bremen": "Werder Bremen",
+    "koln": "Köln",
+    "1 fc koln": "Köln",
+    "fc koln": "Köln",
+    "hertha bsc": "Hertha BSC",
+    "hertha berlin": "Hertha BSC",
+    "schalke": "Schalke 04",
+    "schalke 04": "Schalke 04",
+    "fc schalke 04": "Schalke 04",
+    "hamburger sv": "Hamburger SV",
+    "hamburg": "Hamburger SV",
+    "hannover 96": "Hannover 96",
+    "hannover": "Hannover 96",
+    "nurnberg": "Nürnberg",
+    "1 fc nurnberg": "Nürnberg",
+    "paris saint germain": "Paris Saint-Germain",
+    "paris saint-germain": "Paris Saint-Germain",
+    "psg": "Paris Saint-Germain",
+    "olympique marseille": "Marseille",
+    "marseille": "Marseille",
+    "olympique lyon": "Lyon",
+    "olympique lyonnais": "Lyon",
+    "lyon": "Lyon",
+    "as monaco": "Monaco",
+    "monaco": "Monaco",
+    "lille": "Lille",
+    "losc lille": "Lille",
+    "lille osc": "Lille",
+    "nice": "Nice",
+    "ogc nice": "Nice",
+    "rennes": "Rennes",
+    "stade rennais": "Rennes",
+    "stade rennais fc": "Rennes",
+    "lens": "Lens",
+    "rc lens": "Lens",
+    "strasbourg": "Strasbourg",
+    "rc strasbourg": "Strasbourg",
+    "rc strasbourg alsace": "Strasbourg",
+    "nantes": "Nantes",
+    "fc nantes": "Nantes",
+    "toulouse": "Toulouse",
+    "toulouse fc": "Toulouse",
+    "reims": "Reims",
+    "stade de reims": "Reims",
+    "stade reims": "Reims",
+    "montpellier": "Montpellier",
+    "montpellier hsc": "Montpellier",
+    "hsc montpellier": "Montpellier",
+    "amiens": "Amiens",
+    "amiens sc": "Amiens",
+    "brest": "Brest",
+    "stade brestois 29": "Brest",
+    "stade brestois": "Brest",
+    "stade brest 29": "Brest",
+    "lorient": "Lorient",
+    "fc lorient": "Lorient",
+    "angers": "Angers",
+    "angers sco": "Angers",
+    "sco angers": "Angers",
+    "auxerre": "Auxerre",
+    "aj auxerre": "Auxerre",
+    "le havre": "Le Havre",
+    "le havre ac": "Le Havre",
+    "saint etienne": "Saint-Étienne",
+    "as saint etienne": "Saint-Étienne",
+    "bordeaux": "Bordeaux",
+    "fc girondins de bordeaux": "Bordeaux",
+    "girondins bordeaux": "Bordeaux",
+    "sochaux": "Sochaux",
+    "fc sochaux montbeliard": "Sochaux",
+    "nancy": "Nancy",
+    "as nancy lorraine": "Nancy",
+    "guingamp": "Guingamp",
+    "ea guingamp": "Guingamp",
+    "metz": "Metz",
+    "fc metz": "Metz",
+    "caen": "Caen",
+    "sm caen": "Caen",
+    "troyes": "Troyes",
+    "es troyes ac": "Troyes",
+    "ajaccio": "Ajaccio",
+    "ac ajaccio": "Ajaccio",
+    "bastia": "Bastia",
+    "sc bastia": "Bastia",
+    "clermont": "Clermont",
+    "clermont foot 63": "Clermont",
 }
 
 POSITION_MAP = {
@@ -377,6 +708,8 @@ FIFA_OVERLAY = {
     ("fabio aurelio", 2008): 80,
 }
 
+FIFA_OVERLAY.update(BIG5_OVERLAY)
+
 
 def log(message: str) -> None:
     print(message, flush=True)
@@ -393,12 +726,29 @@ def norm_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+_CLUB_TOKENS = re.compile(
+    r"\b(fc|cf|afc|ac|as|ss|ssc|bc|rc|rcd|ud|cd|sc|sv|vfl|vfb|tsg|ogc|osc|acf|losc|calcio)\b"
+)
+
+
 def club_name(raw: str) -> str:
-    key = norm_text(raw)
-    key = key.replace(" fc", "").replace(" afc", "").strip()
+    original = str(raw or "").strip()
+    key = norm_text(original)
     if "nott" in key and "forest" in key:
         return "Nottingham Forest"
-    return CLUB_ALIASES.get(key, str(raw).replace(" FC", "").strip())
+    if key in CLUB_ALIASES:
+        return CLUB_ALIASES[key]
+    stripped = re.sub(r"\s+", " ", _CLUB_TOKENS.sub(" ", key)).strip()
+    if stripped in CLUB_ALIASES:
+        return CLUB_ALIASES[stripped]
+    cleaned = re.sub(
+        r"^(FC|CF|AC|AS|SS|SSC|RC|RCD|UD|CD|SC|ACF|LOSC|OGC|VfL|VfB|TSG)\s+",
+        "",
+        original,
+        flags=re.I,
+    )
+    cleaned = re.sub(r"\s+(FC|CF|AC|AS|BC)$", "", cleaned, flags=re.I)
+    return cleaned.strip() or original
 
 
 def club_key(name: str) -> str:
@@ -430,8 +780,8 @@ def download(url: str, dest: Path) -> Path:
     if dest.exists() and dest.stat().st_size > 1000:
         return dest
     log(f"  downloading {url}")
-    req = urllib.request.Request(url, headers={"User-Agent": "epl-era-draft/1.0"})
-    with urllib.request.urlopen(req, timeout=120) as response:
+    req = urllib.request.Request(url, headers={"User-Agent": "era-draft/1.0"})
+    with urllib.request.urlopen(req, timeout=300) as response:
         dest.write_bytes(response.read())
     return dest
 
@@ -440,7 +790,18 @@ def percentile_rank(series: pd.Series) -> pd.Series:
     return series.rank(method="average", pct=True).fillna(0.35)
 
 
-ELITE_CLUBS = {"arsenal", "chelsea", "liverpool", "manchester-united"}
+ELITE_CLUBS = {
+    "arsenal",
+    "chelsea",
+    "liverpool",
+    "manchester-united",
+    "real-madrid",
+    "barcelona",
+    "bayern-munich",
+    "juventus",
+    "milan",
+    "inter",
+}
 SLOT_RANK_ADJ = {
     "GK": (4, -1, -7, -12),
     "CB": (3, 2, 0, -3, -7),
@@ -469,6 +830,10 @@ def club_tier(club: str, year: int) -> int:
             return 4
         if key == "manchester-united" and year >= 2014:
             return 4
+        if key == "milan" and 2014 <= year <= 2020:
+            return 3
+        if key == "inter" and 2012 <= year <= 2018:
+            return 3
         return 5
     if key == "manchester-city":
         if year >= 2011:
@@ -484,6 +849,28 @@ def club_tier(club: str, year: int) -> int:
         return 3
     if key == "newcastle-united" and year <= 2005:
         return 3
+    if key in {"atletico-madrid"}:
+        return 5 if year >= 2013 else 3
+    if key == "paris-saint-germain":
+        return 5 if year >= 2012 else 3
+    if key == "borussia-dortmund":
+        return 4
+    if key == "lyon":
+        return 5 if 2001 <= year <= 2008 else 3
+    if key == "napoli":
+        if year >= 2022:
+            return 5
+        if year >= 2010:
+            return 4
+        return 3
+    if key == "valencia" and year <= 2004:
+        return 4
+    if key == "monaco" and year == 2016:
+        return 4
+    if key == "sevilla" and 2005 <= year <= 2007:
+        return 4
+    if key == "bayer-leverkusen" and year >= 2023:
+        return 4
     return 2
 
 
@@ -637,14 +1024,14 @@ def load_transfermarkt() -> pd.DataFrame | None:
                 "minutes_played",
             ],
         )
-        apps = apps[apps["competition_id"] == "GB1"].copy()
+        apps = apps[apps["competition_id"].isin(TM_COMPETITION_IDS)].copy()
         apps["date"] = pd.to_datetime(apps["date"], errors="coerce")
         apps = apps.dropna(subset=["date"])
         apps["season_start"] = apps["date"].dt.year.where(apps["date"].dt.month >= 8, apps["date"].dt.year - 1)
         apps = apps[apps["season_start"].isin(SEASON_STARTS)]
 
         grouped = (
-            apps.groupby(["player_id", "player_club_id", "season_start"], as_index=False)
+            apps.groupby(["player_id", "player_club_id", "season_start", "competition_id"], as_index=False)
             .agg(
                 appearance_name=("player_name", "last"),
                 minutes=("minutes_played", "sum"),
@@ -717,6 +1104,7 @@ def load_transfermarkt() -> pd.DataFrame | None:
                 "market_value",
                 "nationality",
                 "source",
+                "competition_id",
             ]
         ].rename(columns={"display_name": "name"})
     except Exception as exc:  # noqa: BLE001
@@ -760,17 +1148,21 @@ def load_early_era() -> pd.DataFrame:
     return df
 
 
-def load_ewenme() -> pd.DataFrame | None:
-    log("Trying ewenme squad CSVs...")
+def load_ewenme(filename: str = "premier_league.csv") -> pd.DataFrame | None:
+    log(f"Trying ewenme squad CSVs ({filename})...")
     frames = []
+    stem = Path(filename).stem
     for year in range(2004, 2021):
         try:
-            path = download(f"{EWENME_BASE}/{year}/premier_league.csv", CACHE / f"ewenme-{year}.csv")
+            path = download(
+                f"{EWENME_BASE}/{year}/{filename}",
+                CACHE / f"ewenme-{stem}-{year}.csv",
+            )
             df = pd.read_csv(path)
             df["season_start"] = year
             frames.append(df)
         except Exception as exc:  # noqa: BLE001
-            log(f"  skip ewenme {year}: {exc}")
+            log(f"  skip ewenme {filename} {year}: {exc}")
     if not frames:
         return None
     df = pd.concat(frames, ignore_index=True)
@@ -947,7 +1339,7 @@ def to_records(df: pd.DataFrame) -> list[dict]:
     return records
 
 
-def validate(records: list[dict]) -> None:
+def validate(records: list[dict], min_clubs: int = 18) -> None:
     seasons = {r["season"] for r in records}
     clubs = {(r["season"], r["club"]) for r in records}
     log(f"Seasons: {len(seasons)} ({min(seasons) if seasons else '-'} to {max(seasons) if seasons else '-'})")
@@ -959,58 +1351,82 @@ def validate(records: list[dict]) -> None:
     per = {}
     for season, club in clubs:
         per[season] = per.get(season, 0) + 1
-    thin = {s: n for s, n in per.items() if n < 18}
+    thin = {s: n for s, n in per.items() if n < min_clubs}
     if thin:
-        log(f"WARNING seasons with <18 clubs: {thin}")
+        log(f"WARNING seasons with <{min_clubs} clubs: {thin}")
+
+
+def write_payload(filename: str, records: list[dict], notes: list[str]) -> None:
+    payload = {
+        "generatedAt": pd.Timestamp.now(tz="UTC").isoformat(),
+        "sourceNotes": notes,
+        "players": records,
+    }
+    text = json.dumps(payload, ensure_ascii=False)
+    for folder in (ROOT / "data", ROOT / "public" / "data"):
+        folder.mkdir(parents=True, exist_ok=True)
+        dest = folder / filename
+        dest.write_text(text)
+        log(f"Wrote {dest}")
 
 
 def main() -> int:
     CACHE.mkdir(parents=True, exist_ok=True)
-    frames: list[pd.DataFrame] = []
-    tm = load_transfermarkt()
-    if tm is not None and len(tm) > 1000:
-        frames.append(tm)
-    frames.append(load_early_era())
-    ewenme = load_ewenme()
-    if ewenme is not None:
-        frames.append(ewenme)
-    fpl = load_fpl()
-    if fpl is not None:
-        frames.append(fpl)
-    if not frames:
-        log("ERROR: no data sources succeeded")
+    tm_all = load_transfermarkt()
+    ewenme_cache: dict[str, pd.DataFrame | None] = {}
+    fpl = None
+    early = None
+    all_records: list[dict] = []
+    wrote = 0
+
+    for league in LEAGUE_DEFS:
+        log(f"\n=== {league['name']} ({league['competition_id']}) ===")
+        frames: list[pd.DataFrame] = []
+        if tm_all is not None and "competition_id" in tm_all.columns:
+            tm = tm_all[tm_all["competition_id"] == league["competition_id"]].drop(
+                columns=["competition_id"]
+            )
+            log(f"  Transfermarkt {league['competition_id']}: {len(tm)}")
+            if len(tm) > 500:
+                frames.append(tm)
+        if league.get("use_early_era"):
+            if early is None:
+                early = load_early_era()
+            frames.append(early)
+        ewenme_file = str(league.get("ewenme_file") or "")
+        if ewenme_file:
+            if ewenme_file not in ewenme_cache:
+                ewenme_cache[ewenme_file] = load_ewenme(ewenme_file)
+            if ewenme_cache[ewenme_file] is not None:
+                frames.append(ewenme_cache[ewenme_file])
+        if league.get("use_fpl"):
+            if fpl is None:
+                fpl = load_fpl()
+            if fpl is not None:
+                frames.append(fpl)
+        if not frames:
+            log(f"ERROR: no data sources succeeded for {league['name']}")
+            continue
+
+        merged = merge_sources(frames)
+        records = to_records(merged)
+        validate(records, min_clubs=int(league["min_clubs"]))
+        write_payload(str(league["filename"]), records, list(league["notes"]))
+        all_records.extend(records)
+        wrote += 1
+
+    if wrote == 0:
+        log("ERROR: no leagues were written")
         return 1
 
-    merged = merge_sources(frames)
-    records = to_records(merged)
-    validate(records)
-    payload = {
-        "generatedAt": pd.Timestamp.now(tz="UTC").isoformat(),
-        "sourceNotes": [
-            "Premier League player-seasons 2000-01 to 2025-26",
-            "Squads from Transfermarkt appearances (GB1), with FPL and ewenme fallbacks",
-            "Ratings are FIFA overlays where listed; otherwise FIFA-like estimates from minutes, output, value, and club quality",
-            "Squad-list seasons without stats use club strength, squad order, age, and career carry-forward",
-        ],
-        "players": records,
-    }
-    OUT_DATA.parent.mkdir(parents=True, exist_ok=True)
-    OUT_PUBLIC.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, ensure_ascii=False)
-    OUT_DATA.write_text(text)
-    OUT_PUBLIC.write_text(text)
-    log(f"Wrote {OUT_DATA}")
-    log(f"Wrote {OUT_PUBLIC}")
     try:
-        photo_out = ROOT / "public" / "data" / "player-photos.json"
-        if photo_out.exists() and photo_out.stat().st_size > 1000:
-            log("Player photos already present; skipping rebuild")
-        else:
-            from player_photos import build_photos, write_photos
+        from player_photos import build_photos, write_photos
 
-            write_photos(build_photos(records))
+        log("\n=== player photos ===")
+        write_photos(build_photos(all_records))
     except Exception as exc:  # noqa: BLE001
         log(f"WARNING player photos skipped: {exc}")
+        traceback.print_exc()
     return 0
 
 

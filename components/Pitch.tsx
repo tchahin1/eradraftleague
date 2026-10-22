@@ -45,7 +45,7 @@ export function Pitch({
   const formation = FORMATION_BY_ID[formationId];
 
   return (
-    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl border border-emerald-400/20 bg-linear-to-b from-emerald-800 via-emerald-700 to-emerald-900 shadow-[inset_0_0_80px_rgba(0,0,0,0.35)]">
+    <div className="relative aspect-[3/4] w-full overflow-hidden rounded-3xl border border-green-400/20 bg-linear-to-b from-green-800 via-green-700 to-green-900 shadow-[inset_0_0_80px_rgba(0,0,0,0.35)]">
       <div className="pointer-events-none absolute inset-x-[8%] top-[6%] h-[88%] rounded-[12px] border-2 border-white/25" />
       <div className="pointer-events-none absolute inset-x-[28%] top-[6%] h-[18%] rounded-b-[12px] border-2 border-t-0 border-white/20" />
       <div className="pointer-events-none absolute inset-x-[28%] bottom-[6%] h-[18%] rounded-t-[12px] border-2 border-b-0 border-white/20" />

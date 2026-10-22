@@ -285,6 +285,16 @@ export function pickOpponentClubSeasons(
     if (!seasons?.length) continue;
     selected.push(seasons[Math.floor(Math.random() * seasons.length)]);
   }
+  if (selected.length < count) {
+    const used = new Set(selected.map((squad) => `${squad.clubKey}::${squad.season}`));
+    const rest = clubSeasons
+      .filter((squad) => !used.has(`${squad.clubKey}::${squad.season}`))
+      .sort(() => Math.random() - 0.5);
+    for (const squad of rest) {
+      if (selected.length >= count) break;
+      selected.push(squad);
+    }
+  }
   return selected;
 }
 
@@ -295,7 +305,10 @@ export function isMatchPlayed(match: MatchResult): boolean {
 }
 
 export function seasonLength(league: LeagueState): number {
-  return league.matches.reduce((max, match) => Math.max(max, match.gameweek), 0) || TOTAL_GAMEWEEKS;
+  const fromMatches = league.matches.reduce((max, match) => Math.max(max, match.gameweek), 0);
+  if (fromMatches) return fromMatches;
+  const n = league.teams.length;
+  return n > 1 ? (n - 1) * 2 : TOTAL_GAMEWEEKS;
 }
 
 export function playedGameweeksOf(league: LeagueState): number {
@@ -420,7 +433,8 @@ export function simulateSeason(
   playerTeam: SimTeam,
   opponents: SimTeam[],
 ): LeagueState {
-  return playGameweeks(startSeason(playerTeam, opponents), TOTAL_GAMEWEEKS);
+  const started = startSeason(playerTeam, opponents);
+  return playGameweeks(started, seasonLength(started));
 }
 
 export function makePlayerLeagueTeam(

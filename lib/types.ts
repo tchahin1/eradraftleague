@@ -1,3 +1,5 @@
+import type { LeagueId } from "./leagues";
+
 export type PositionGroup = "GK" | "DEF" | "MID" | "FWD";
 
 export type SlotKind =
@@ -119,6 +121,7 @@ export type GamePhase = "home" | "formation" | "draft" | "season";
 
 export type GameState = {
   phase: GamePhase;
+  leagueId: LeagueId | null;
   teamName: string;
   formationId: FormationId | null;
   xi: Record<string, PlayerSeason | null>;

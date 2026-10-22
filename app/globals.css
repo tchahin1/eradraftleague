@@ -3,19 +3,94 @@
 @theme inline {
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
-  --color-background: #07140c;
-  --color-foreground: #f4efe2;
+  --color-background: var(--league-bg);
+  --color-foreground: var(--league-foreground);
+}
+
+@property --league-bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #07140c;
+}
+
+@property --league-bg-mid {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #0b1f12;
+}
+
+@property --league-bg-deep {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #040b07;
+}
+
+@property --league-accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #fcd34d;
+}
+
+@property --league-glow {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #e8c547;
+}
+
+html {
+  --league-bg-mid: #0b1f12;
+  --league-bg: #07140c;
+  --league-bg-deep: #040b07;
+  --league-glow: #e8c547;
+  --league-accent: #fcd34d;
+  --league-foreground: #f4efe2;
+}
+
+html[data-league="laliga"] {
+  --league-bg-mid: #3d2208;
+  --league-bg: #1f1206;
+  --league-bg-deep: #120a03;
+  --league-glow: #e8c547;
+  --league-accent: #fcd34d;
+}
+
+html[data-league="seriea"] {
+  --league-bg-mid: #321010;
+  --league-bg: #1c0808;
+  --league-bg-deep: #0e0404;
+  --league-glow: #e8c547;
+  --league-accent: #fcd34d;
+}
+
+html[data-league="bundesliga"] {
+  --league-bg-mid: #121a32;
+  --league-bg: #070b16;
+  --league-bg-deep: #04060e;
+  --league-glow: #e8c547;
+  --league-accent: #fcd34d;
+}
+
+html[data-league="ligue1"] {
+  --league-bg-mid: #22142f;
+  --league-bg: #120818;
+  --league-bg-deep: #0a0410;
+  --league-glow: #e8c547;
+  --league-accent: #fcd34d;
 }
 
 html,
 body {
   min-height: 100%;
-  background:
-    radial-gradient(circle at top, rgba(232, 197, 71, 0.08), transparent 28%),
-    linear-gradient(180deg, #0b1f12 0%, #07140c 40%, #040b07 100%);
-  color: var(--color-foreground);
+  background-color: var(--league-bg);
+  background-image:
+    radial-gradient(circle at top, color-mix(in srgb, var(--league-glow) 14%, transparent), transparent 28%),
+    linear-gradient(180deg, var(--league-bg-mid) 0%, var(--league-bg) 40%, var(--league-bg-deep) 100%);
+  color: var(--league-foreground);
   scrollbar-width: none;
   -ms-overflow-style: none;
+  transition:
+    background-color 420ms ease,
+    color 420ms ease;
 }
 
 html::-webkit-scrollbar,
@@ -48,4 +123,74 @@ button {
 .overflow-y-auto::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 999px;
+}
+
+.league-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: color-mix(in srgb, var(--card-wash) 86%, transparent);
+  box-shadow: inset 5px 0 0 var(--card-accent);
+  transform: translateY(0) scale(1);
+  transition:
+    transform 280ms ease,
+    border-color 280ms ease,
+    background-color 280ms ease,
+    box-shadow 280ms ease;
+}
+
+.league-card-country {
+  color: #fcd34d;
+}
+
+.league-card-start {
+  transform: translateY(-3px) scale(1.02);
+  border-color: #fcd34d;
+  background: color-mix(in srgb, var(--card-wash) 92%, black 8%);
+  box-shadow:
+    inset 5px 0 0 #fcd34d,
+    0 0 0 2px #fcd34d,
+    0 16px 40px rgb(252 211 77 / 0.28);
+}
+
+.league-card-hover {
+  transform: translateY(-6px) scale(1.03);
+  border-color: var(--card-accent);
+  background: color-mix(in srgb, var(--card-wash) 96%, white 4%);
+  box-shadow:
+    inset 5px 0 0 var(--card-accent),
+    0 0 0 2px var(--card-accent),
+    0 22px 48px color-mix(in srgb, var(--card-accent) 32%, transparent);
+}
+
+.league-card-start.league-card-hover {
+  box-shadow:
+    inset 5px 0 0 #fcd34d,
+    0 0 0 2px #fcd34d,
+    0 22px 48px rgb(252 211 77 / 0.32);
+}
+
+.league-card[data-card="epl"] {
+  --card-accent: #fcd34d;
+  --card-wash: #0a3a28;
+}
+
+.league-card[data-card="laliga"] {
+  --card-accent: #e8c547;
+  --card-wash: #7a3a0c;
+}
+
+.league-card[data-card="seriea"] {
+  --card-accent: #f4f7f4;
+  --card-wash: #6b1515;
+}
+
+.league-card[data-card="bundesliga"] {
+  --card-accent: #f4f7ff;
+  --card-wash: #152444;
+}
+
+.league-card[data-card="ligue1"] {
+  --card-accent: #f6f0ff;
+  --card-wash: #2e1848;
 }

@@ -24,7 +24,7 @@ from ingest_epl import CACHE, FIFA_OVERLAY, ROOT  # noqa: E402
 
 OUT_DATA = ROOT / "data" / "player-photos.json"
 OUT_PUBLIC = ROOT / "public" / "data" / "player-photos.json"
-PLAYERS_JSON = ROOT / "public" / "data" / "epl-player-seasons.json"
+PLAYERS_DIR = ROOT / "public" / "data"
 TM_PLAYERS = CACHE / "players.csv.gz"
 WIKI_CACHE = CACHE / "wiki-thumbs.json"
 FPL_PHOTO = "https://resources.premierleague.com/premierleague/photos/players/250x250/p{code}.png"
@@ -50,6 +50,35 @@ WIKI_TITLES = {
     "ole gunnar solskjaer": "Ole_Gunnar_Solskjær",
     "arnjen robben": "Arjen_Robben",
     "gabriel magalhaes": "Gabriel_Magalhães",
+    "zinedine zidane": "Zinedine_Zidane",
+    "lionel messi": "Lionel_Messi",
+    "cristiano ronaldo": "Cristiano_Ronaldo",
+    "ronaldinho": "Ronaldinho",
+    "andres iniesta": "Andrés_Iniesta",
+    "xavi hernandez": "Xavi",
+    "iker casillas": "Iker_Casillas",
+    "sergio ramos": "Sergio_Ramos",
+    "karim benzema": "Karim_Benzema",
+    "luka modric": "Luka_Modrić",
+    "toni kroos": "Toni_Kroos",
+    "neymar": "Neymar",
+    "kylian mbappe": "Kylian_Mbappé",
+    "zlatan ibrahimovic": "Zlatan_Ibrahimović",
+    "gianluigi buffon": "Gianluigi_Buffon",
+    "paolo maldini": "Paolo_Maldini",
+    "francesco totti": "Francesco_Totti",
+    "kaka": "Kaká",
+    "andrea pirlo": "Andrea_Pirlo",
+    "oliver kahn": "Oliver_Kahn",
+    "franck ribery": "Franck_Ribéry",
+    "arjen robben": "Arjen_Robben",
+    "manuel neuer": "Manuel_Neuer",
+    "robert lewandowski": "Robert_Lewandowski",
+    "thomas muller": "Thomas_Müller",
+    "philipp lahm": "Philipp_Lahm",
+    "erling haaland": "Erling_Haaland",
+    "vinicius junior": "Vinícius_Júnior",
+    "lamine yamal": "Lamine_Yamal",
 }
 
 
@@ -246,12 +275,25 @@ def write_photos(photos: dict[str, str]) -> None:
     log(f"Wrote {OUT_PUBLIC} ({len(photos)} portraits)")
 
 
+def load_all_records() -> list[dict]:
+    records: list[dict] = []
+    paths = sorted(PLAYERS_DIR.glob("*-player-seasons.json"))
+    if not paths:
+        raise FileNotFoundError("No *-player-seasons.json files — run ingest first")
+    for path in paths:
+        data = json.loads(path.read_text())
+        chunk = data["players"] if isinstance(data, dict) else data
+        log(f"  {path.name}: {len(chunk)} player-seasons")
+        records.extend(chunk)
+    return records
+
+
 def main() -> int:
-    if not PLAYERS_JSON.exists():
-        log("ERROR: public/data/epl-player-seasons.json missing — run ingest first")
+    try:
+        records = load_all_records()
+    except FileNotFoundError as exc:
+        log(f"ERROR: {exc}")
         return 1
-    data = json.loads(PLAYERS_JSON.read_text())
-    records = data["players"] if isinstance(data, dict) else data
     photos = build_photos(records)
     write_photos(photos)
     return 0
