@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FORMATION_BY_ID } from "@/lib/formations";
 import { squadToXiRecord, type PvpMatch, type PvpSquad } from "@/lib/pvp";
 import type { GoalScorer } from "@/lib/types";
+import { MatchPitch } from "./MatchPitch";
 import { Pitch } from "./Pitch";
 import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
 
@@ -78,23 +79,35 @@ export function PvpMatchScreen({
 }: Props) {
   const [revealed, setRevealed] = useState(0);
   const [done, setDone] = useState(false);
+  const [clock, setClock] = useState("Kick off");
   const live = runningScore(match, revealed);
   const youHome = match.homeId === youId;
   const yours = youHome ? match.homeGoals : match.awayGoals;
   const theirs = youHome ? match.awayGoals : match.homeGoals;
   const result = yours > theirs ? "You win" : yours < theirs ? "You lose" : "Draw";
-  const status = done ? "Full time" : revealed === 0 ? "Kick off" : "Goal";
-
-  useEffect(() => {
-    if (done) return;
-    const totalGoals = match.scorers.length;
-    const delay = revealed === 0 ? 850 : revealed >= totalGoals ? 650 : 750;
-    const timer = window.setTimeout(() => {
-      if (revealed >= totalGoals) setDone(true);
-      else setRevealed((count) => count + 1);
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [done, match.scorers.length, revealed]);
+  const status = done ? "Full time" : clock;
+  const homeSide = useMemo(
+    () => ({
+      id: match.homeId,
+      name: match.homeName,
+      formationId: match.homeSquad.formationId,
+      xi: match.homeSquad.xi,
+    }),
+    [match.homeId, match.homeName, match.homeSquad],
+  );
+  const awaySide = useMemo(
+    () => ({
+      id: match.awayId,
+      name: match.awayName,
+      formationId: match.awaySquad.formationId,
+      xi: match.awaySquad.xi,
+    }),
+    [match.awayId, match.awayName, match.awaySquad],
+  );
+  const onMatchComplete = useCallback(() => {
+    setRevealed(match.scorers.length);
+    setDone(true);
+  }, [match.scorers.length]);
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8">
@@ -128,6 +141,15 @@ export function PvpMatchScreen({
         {done ? (
           <p className="mt-6 text-center text-2xl font-black text-amber-200">{result}</p>
         ) : null}
+        <MatchPitch
+          home={homeSide}
+          away={awaySide}
+          scorers={match.scorers}
+          youId={youId}
+          onReveal={setRevealed}
+          onClock={setClock}
+          onComplete={onMatchComplete}
+        />
       </section>
 
       {done ? (

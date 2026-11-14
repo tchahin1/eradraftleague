@@ -9,6 +9,7 @@ import {
   indexClubSeasons,
   pickRandomOffer,
 } from "@/lib/draft";
+import { previewMatchFromPlayers } from "@/lib/match-tape";
 import { isRoomCode, normalizeRoomCode } from "@/lib/pvp";
 import {
   BENCH_SIZE,
@@ -34,14 +35,26 @@ import { clearGame, emptyGame, loadGame, peekSavedGame, saveGame } from "@/lib/s
 import type { FormationId, GameState, PlayerSeason, SimMode } from "@/lib/types";
 import { DraftScreen } from "./DraftScreen";
 import { FormationScreen } from "./FormationScreen";
+import { MatchPitch } from "./MatchPitch";
 import { PvpApp } from "./PvpApp";
 import { SeasonScreen } from "./SeasonScreen";
+
+function BootScreen() {
+  return (
+    <main className="grid min-h-screen place-items-center" suppressHydrationWarning>
+      <p className="animate-pulse text-emerald-100/70" suppressHydrationWarning>
+        Loading…
+      </p>
+    </main>
+  );
+}
 
 export function GameApp() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const roomParam = normalizeRoomCode(searchParams.get("room") ?? "");
   const urlRoom = isRoomCode(roomParam) ? roomParam : null;
+  const demoPitch = searchParams.get("demo") === "pitch";
   const [pvpMenu, setPvpMenu] = useState(false);
   const pvp = pvpMenu || Boolean(urlRoom);
   const [players, setPlayers] = useState<PlayerSeason[] | null>(null);
@@ -53,8 +66,13 @@ export function GameApp() {
   const [loadingLeague, setLoadingLeague] = useState<LeagueId | null>(null);
   const [savedMeta, setSavedMeta] = useState<ReturnType<typeof peekSavedGame>>(null);
   const [hoveredLeague, setHoveredLeague] = useState<LeagueId | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   const clubSeasons = useMemo(() => (players ? indexClubSeasons(players) : []), [players]);
+  const pitchPreview = useMemo(
+    () => (demoPitch && players ? previewMatchFromPlayers(players) : null),
+    [demoPitch, players],
+  );
   const leagueInfo = state.leagueId ? LEAGUE_BY_ID[state.leagueId] : null;
   const previewLeagueId: LeagueId =
     state.phase === "home"
@@ -62,8 +80,25 @@ export function GameApp() {
       : (state.leagueId ?? loadingLeague ?? STARTING_LEAGUE_ID);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     document.documentElement.dataset.league = previewLeagueId;
   }, [previewLeagueId]);
+
+  useEffect(() => {
+    if (!demoPitch || players) return;
+    let cancelled = false;
+    loadDataset("epl").then((data) => {
+      if (cancelled) return;
+      setPlayers(data);
+      setLoadedLeagueId("epl");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [demoPitch, players]);
 
   const ensureLeagueData = async (leagueId: LeagueId) => {
     if (loadedLeagueId === leagueId && players) return players;
@@ -74,6 +109,10 @@ export function GameApp() {
   };
 
   useEffect(() => {
+    if (demoPitch) {
+      setHydrated(true);
+      return;
+    }
     const saved = peekSavedGame();
     setSavedMeta(saved);
     if (!saved) {
@@ -94,7 +133,7 @@ export function GameApp() {
         setHydrated(true);
       })
       .finally(() => setLoadingLeague(null));
-  }, []);
+  }, [demoPitch]);
 
   useEffect(() => {
     if (!hydrated || pvp) return;
@@ -271,6 +310,8 @@ export function GameApp() {
     setState({ ...emptyGame(), teamName: state.teamName || "Your XI" });
   };
 
+  if (!mounted) return <BootScreen />;
+
   if (pvp) {
     return (
       <PvpApp
@@ -280,6 +321,20 @@ export function GameApp() {
           router.replace("/", { scroll: false });
         }}
       />
+    );
+  }
+
+  if (demoPitch) {
+    if (!players || !pitchPreview) return <BootScreen />;
+    return (
+      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center px-4 py-10">
+        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">Preview</p>
+        <h1 className="mt-2 text-4xl font-black text-white">2D match tape</h1>
+        <p className="mt-2 max-w-xl text-emerald-100/75">
+          Same clip season and PvP will play after kickoff. Skip jumps to full time.
+        </p>
+        <MatchPitch home={pitchPreview.home} away={pitchPreview.away} scorers={pitchPreview.scorers} youId="home" />
+      </main>
     );
   }
 

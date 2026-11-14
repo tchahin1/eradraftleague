@@ -348,13 +348,6 @@ function asSimTeam(team: LeagueTeam): SimTeam {
   };
 }
 
-function stripSquads(teams: LeagueTeam[]): LeagueTeam[] {
-  return teams.map((team) => {
-    const { xi: _xi, bench: _bench, ...rest } = team;
-    return rest;
-  });
-}
-
 function buildFixtures(teamIds: string[]): MatchResult[] {
   const rounds = roundRobinPairs(teamIds);
   const matches: MatchResult[] = [];
@@ -418,13 +411,11 @@ export function playGameweeks(league: LeagueState, throughGameweek: number): Lea
     };
   });
 
-  const complete = target >= total;
-  const teams = complete ? stripSquads(league.teams) : league.teams;
   const playedMatches = matches.filter((match) => isMatchPlayed(match) && match.gameweek <= target);
   return {
-    teams,
+    teams: league.teams,
     matches,
-    table: buildTable(teams, playedMatches),
+    table: buildTable(league.teams, playedMatches),
     playedGameweeks: target,
   };
 }

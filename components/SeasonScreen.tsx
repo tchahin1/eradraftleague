@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   isMatchPlayed,
   isSeasonComplete,
@@ -15,6 +15,8 @@ import {
   FORMATION_BY_ID,
 } from "@/lib/formations";
 import type { FormationId, GoalScorer, LeagueState, MatchResult, PlayerSeason } from "@/lib/types";
+import { inferFormation, type MatchSide } from "@/lib/match-tape";
+import { MatchPitch } from "./MatchPitch";
 import { Pitch } from "./Pitch";
 import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
 
@@ -23,6 +25,8 @@ type WatchState = {
   revealed: number;
   done: boolean;
 };
+
+const EMPTY_SCORERS: GoalScorer[] = [];
 
 type Props = {
   teamName: string;
@@ -54,6 +58,36 @@ function ordinal(n: number): string {
     default:
       return `${n}th`;
   }
+}
+
+function matchSide(
+  league: LeagueState,
+  teamId: string,
+  playerFormationId?: FormationId | null,
+  playerXi?: Record<string, PlayerSeason | null>,
+): MatchSide {
+  const team = league.teams.find((item) => item.id === teamId);
+  if (teamId === PLAYER_TEAM_ID && playerFormationId && playerXi) {
+    const formation = FORMATION_BY_ID[playerFormationId];
+    const xi = formation.slots
+      .map((slot) => playerXi[slot.id])
+      .filter((player): player is PlayerSeason => Boolean(player));
+    if (xi.length) {
+      return {
+        id: teamId,
+        name: team?.name ?? "Your XI",
+        formationId: playerFormationId,
+        xi,
+      };
+    }
+  }
+  const xi = team?.xi ?? [];
+  return {
+    id: teamId,
+    name: team?.name ?? teamId,
+    formationId: inferFormation(xi),
+    xi,
+  };
 }
 
 function playerMatchInGameweek(league: LeagueState, gameweek: number): MatchResult | undefined {
@@ -387,6 +421,7 @@ export function SeasonScreen({
   const [tab, setTab] = useState<"table" | "gameweek" | "mine">(completeLeague ? "table" : "gameweek");
   const [openMatch, setOpenMatch] = useState<MatchResult | null>(null);
   const [watching, setWatching] = useState<WatchState | null>(null);
+  const [clock, setClock] = useState("Kick off");
   const [pendingMatchId, setPendingMatchId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -395,6 +430,7 @@ export function SeasonScreen({
     if (!match || !isMatchPlayed(match)) return;
     setPendingMatchId(null);
     setWatching({ match, revealed: 0, done: false });
+    setClock("Kick off");
     setGameweek(match.gameweek);
     setTab("gameweek");
   }, [league, pendingMatchId]);
@@ -402,21 +438,6 @@ export function SeasonScreen({
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [tab]);
-
-  useEffect(() => {
-    if (!watching || watching.done) return;
-    const totalGoals = (watching.match.scorers ?? []).length;
-    const delay = watching.revealed === 0 ? 850 : watching.revealed >= totalGoals ? 650 : 750;
-    const timer = window.setTimeout(() => {
-      setWatching((current) => {
-        if (!current || current.done) return current;
-        const goals = (current.match.scorers ?? []).length;
-        if (current.revealed >= goals) return { ...current, done: true };
-        return { ...current, revealed: current.revealed + 1 };
-      });
-    }, delay);
-    return () => window.clearTimeout(timer);
-  }, [watching]);
 
   const you = league.table.find((row) => row.teamId === PLAYER_TEAM_ID);
   const rank = league.table.findIndex((row) => row.teamId === PLAYER_TEAM_ID) + 1;
@@ -428,13 +449,24 @@ export function SeasonScreen({
   const sliderMax = showFinal ? total : Math.max(1, watching?.match.gameweek ?? upcoming ?? played);
 
   const liveScore = watching ? runningScore(watching.match, watching.revealed) : null;
-  const watchStatus = watching
-    ? watching.done
-      ? "Full time"
-      : watching.revealed === 0
-        ? "Kick off"
-        : "Goal"
-    : null;
+  const watchStatus = watching ? (watching.done ? "Full time" : clock) : null;
+  const watchMatch = watching?.match;
+  const watchHome = useMemo(
+    () => (watchMatch ? matchSide(league, watchMatch.homeId, formationId, xi) : null),
+    [watchMatch, league, formationId, xi],
+  );
+  const watchAway = useMemo(
+    () => (watchMatch ? matchSide(league, watchMatch.awayId, formationId, xi) : null),
+    [watchMatch, league, formationId, xi],
+  );
+  const onWatchReveal = useCallback((count: number) => {
+    setWatching((current) => (current ? { ...current, revealed: count } : current));
+  }, []);
+  const onWatchComplete = useCallback(() => {
+    setWatching((current) =>
+      current ? { ...current, done: true, revealed: (current.match.scorers ?? []).length } : current,
+    );
+  }, []);
 
   const gwMatches = useMemo(
     () => league.matches.filter((match) => match.gameweek === gameweek),
@@ -565,6 +597,18 @@ export function SeasonScreen({
             scorers={liveScore.scorers}
             status={watchStatus}
           />
+          {watchHome && watchAway ? (
+            <MatchPitch
+              key={watching.match.id}
+              home={watchHome}
+              away={watchAway}
+              scorers={watching.match.scorers ?? EMPTY_SCORERS}
+              youId={PLAYER_TEAM_ID}
+              onReveal={onWatchReveal}
+              onClock={setClock}
+              onComplete={onWatchComplete}
+            />
+          ) : null}
           {watching.done && nextFixture && formationId && xi && bench && onLineupChange ? (
             <div className="mt-8 border-t border-white/10 pt-6">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-300">
