@@ -7,12 +7,20 @@ import type { FormationId } from "@/lib/types";
 type Props = {
   teamName: string;
   leagueName: string;
+  backLabel?: string;
   onTeamName: (value: string) => void;
   onChoose: (id: FormationId) => void;
   onBack: () => void;
 };
 
-export function FormationScreen({ teamName, leagueName, onTeamName, onChoose, onBack }: Props) {
+export function FormationScreen({
+  teamName,
+  leagueName,
+  backLabel = "Change league",
+  onTeamName,
+  onChoose,
+  onBack,
+}: Props) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
       <header className="space-y-3 text-center">
@@ -20,7 +28,7 @@ export function FormationScreen({ teamName, leagueName, onTeamName, onChoose, on
           {leagueName} · Step 1
         </p>
         <button type="button" onClick={onBack} className="text-sm text-emerald-100/70 underline-offset-4 hover:underline">
-          Change league
+          {backLabel}
         </button>
         <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">Pick your shape</h1>
         <p className="mx-auto max-w-xl text-emerald-100/75">

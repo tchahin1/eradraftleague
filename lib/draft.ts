@@ -8,8 +8,11 @@ import type {
   ClubSeason,
   DraftOffer,
   Formation,
+  FormationId,
   PlayerSeason,
 } from "./types";
+
+export type DraftPlacement = { type: "xi"; slotId: string } | { type: "bench"; index: number };
 
 export const REROLLS_PER_DRAFT = 3;
 
@@ -151,3 +154,106 @@ export function canSwapToSlot(
 }
 
 type SlotKindLike = Parameters<typeof playerFitsSlot>[1];
+
+export function applyDraftPlacement(args: {
+  selected: PlayerSeason;
+  target: DraftPlacement;
+  formation: Formation;
+  formationId: FormationId;
+  xi: Record<string, PlayerSeason | null>;
+  bench: (PlayerSeason | null)[];
+  offer: DraftOffer | null;
+  usedPlayerIds: string[];
+  usedClubSeasons: string[];
+  clubSeasons: ClubSeason[];
+}): {
+  xi: Record<string, PlayerSeason | null>;
+  bench: (PlayerSeason | null)[];
+  usedPlayerIds: string[];
+  usedClubSeasons: string[];
+  offer: DraftOffer | null;
+} | null {
+  const { selected, target, formation, formationId, offer, clubSeasons } = args;
+  const nextXi = { ...args.xi };
+  const nextBench = [...args.bench];
+  const alreadyDrafted =
+    Object.values(nextXi).some((player) => player?.id === selected.id) ||
+    nextBench.some((player) => player?.id === selected.id);
+
+  if (alreadyDrafted) {
+    if (target.type === "xi") {
+      const slot = formation.slots.find((item) => item.id === target.slotId);
+      if (!slot) return null;
+      const occupant = nextXi[target.slotId];
+      const fromBench = nextBench.findIndex((player) => player?.id === selected.id);
+      if (fromBench >= 0) {
+        nextBench[fromBench] = occupant;
+        nextXi[target.slotId] = selected;
+      } else {
+        const fromSlot = Object.entries(nextXi).find(([, player]) => player?.id === selected.id)?.[0];
+        if (!fromSlot || fromSlot === target.slotId) return null;
+        nextXi[fromSlot] = occupant;
+        nextXi[target.slotId] = selected;
+      }
+    } else {
+      if (nextBench[target.index]?.id === selected.id) return null;
+      const occupant = nextBench[target.index];
+      const fromSlot = Object.entries(nextXi).find(([, player]) => player?.id === selected.id)?.[0];
+      const fromBench = nextBench.findIndex((player) => player?.id === selected.id);
+      if (fromSlot) {
+        nextXi[fromSlot] = occupant;
+        nextBench[target.index] = selected;
+      } else if (fromBench >= 0) {
+        nextBench[fromBench] = occupant;
+        nextBench[target.index] = selected;
+      } else {
+        return null;
+      }
+    }
+    return {
+      xi: nextXi,
+      bench: nextBench,
+      usedPlayerIds: args.usedPlayerIds,
+      usedClubSeasons: args.usedClubSeasons,
+      offer,
+    };
+  }
+
+  if (!playerCanBePicked(selected, formation, args.xi, args.bench)) return null;
+  if (!offer) return null;
+
+  if (target.type === "xi") {
+    const slot = formation.slots.find((item) => item.id === target.slotId);
+    if (!slot || nextXi[target.slotId]) return null;
+    nextXi[target.slotId] = selected;
+  } else if (nextBench[target.index]) {
+    if (selected.group !== "GK" || nextBench.some((player) => player?.group === "GK")) return null;
+    nextBench[target.index] = selected;
+  } else {
+    nextBench[target.index] = selected;
+  }
+
+  const usedPlayerIds = [...args.usedPlayerIds, selected.playerId];
+  const usedClubSeasons = [...args.usedClubSeasons, clubSeasonKey(offer.clubKey, offer.season)];
+  const complete = formation.slots.every((slot) => nextXi[slot.id] !== null) &&
+    nextBench.filter(Boolean).length === BENCH_SIZE &&
+    nextBench.some((player) => player?.group === "GK");
+  const nextOffer = complete
+    ? offer
+    : pickRandomOffer(
+        clubSeasons,
+        new Set(usedClubSeasons),
+        new Set(usedPlayerIds),
+        formationId,
+        nextXi,
+        nextBench,
+      );
+
+  return {
+    xi: nextXi,
+    bench: nextBench,
+    usedPlayerIds,
+    usedClubSeasons,
+    offer: nextOffer,
+  };
+}

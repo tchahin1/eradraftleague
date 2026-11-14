@@ -16,6 +16,17 @@ import { Pitch } from "./Pitch";
 import { PlayerCard } from "./PlayerCard";
 import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
 
+type PvpDraftStatus = {
+  opponentName: string;
+  opponentFilled: number;
+  opponentReady: boolean;
+  opponentConnected: boolean;
+  youReady: boolean;
+  squadSize: number;
+  onReady: () => void;
+  onUnready: () => void;
+};
+
 type Props = {
   teamName: string;
   leagueName: string;
@@ -29,7 +40,8 @@ type Props = {
   onReroll: () => void;
   onSelectPlayer: (player: PlayerSeason | null) => void;
   onPlace: (target: { type: "xi"; slotId: string } | { type: "bench"; index: number }) => void;
-  onStartSeason: (mode: SimMode) => void;
+  onStartSeason?: (mode: SimMode) => void;
+  pvp?: PvpDraftStatus;
 };
 
 export function DraftScreen({
@@ -46,6 +58,7 @@ export function DraftScreen({
   onSelectPlayer,
   onPlace,
   onStartSeason,
+  pvp,
 }: Props) {
   const formation = FORMATION_BY_ID[formationId];
   const filled = countFilled(xi, bench);
@@ -119,7 +132,57 @@ export function DraftScreen({
             })}
           </div>
         </div>
-        {complete ? (
+        {pvp ? (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-100/80">
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  vs <span className="font-semibold text-white">{pvp.opponentName}</span>
+                  {!pvp.opponentConnected ? <span className="text-rose-200"> · disconnected</span> : null}
+                </span>
+                <span className="tabular-nums text-amber-200">
+                  {pvp.opponentReady ? "Ready" : `${pvp.opponentFilled}/${pvp.squadSize}`}
+                </span>
+              </div>
+            </div>
+            {complete ? (
+              pvp.youReady ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded-2xl bg-amber-300/80 px-4 py-3 text-sm font-black uppercase tracking-widest text-emerald-950"
+                  >
+                    {pvp.opponentReady ? "Kick off…" : "Waiting for them"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={pvp.onUnready}
+                    className="rounded-2xl bg-white/10 px-4 py-3 text-sm font-black uppercase tracking-widest text-white"
+                  >
+                    Edit squad
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={pvp.onReady}
+                  className="w-full rounded-2xl bg-amber-300 px-4 py-3 text-sm font-black uppercase tracking-widest text-emerald-950"
+                >
+                  Ready to play
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="w-full rounded-2xl bg-white/15 py-3 text-sm font-black uppercase tracking-widest text-white/40"
+              >
+                Finish XI + 7-man bench to ready up
+              </button>
+            )}
+          </div>
+        ) : complete && onStartSeason ? (
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"

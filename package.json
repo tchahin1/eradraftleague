@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "party:dev": "wrangler dev",
+    "party:deploy": "wrangler deploy",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -12,6 +14,8 @@
   },
   "dependencies": {
     "next": "16.4.0",
+    "partyserver": "^0.5.10",
+    "partysocket": "^1.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
@@ -23,6 +27,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.162.0"
   }
 }

@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { loadDataset } from "@/lib/data";
 import {
+  applyDraftPlacement,
   clubSeasonKey,
   indexClubSeasons,
   pickRandomOffer,
-  playerCanBePicked,
 } from "@/lib/draft";
+import { isRoomCode, normalizeRoomCode } from "@/lib/pvp";
 import {
   BENCH_SIZE,
   emptyXi,
@@ -32,9 +34,16 @@ import { clearGame, emptyGame, loadGame, peekSavedGame, saveGame } from "@/lib/s
 import type { FormationId, GameState, PlayerSeason, SimMode } from "@/lib/types";
 import { DraftScreen } from "./DraftScreen";
 import { FormationScreen } from "./FormationScreen";
+import { PvpApp } from "./PvpApp";
 import { SeasonScreen } from "./SeasonScreen";
 
 export function GameApp() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const roomParam = normalizeRoomCode(searchParams.get("room") ?? "");
+  const urlRoom = isRoomCode(roomParam) ? roomParam : null;
+  const [pvpMenu, setPvpMenu] = useState(false);
+  const pvp = pvpMenu || Boolean(urlRoom);
   const [players, setPlayers] = useState<PlayerSeason[] | null>(null);
   const [loadedLeagueId, setLoadedLeagueId] = useState<LeagueId | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -88,10 +97,10 @@ export function GameApp() {
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || pvp) return;
     saveGame(state);
     setSavedMeta(peekSavedGame());
-  }, [state, hydrated]);
+  }, [state, hydrated, pvp]);
 
   useEffect(() => {
     if (!hydrated || state.phase !== "draft" || state.offer || !state.formationId) return;
@@ -165,84 +174,27 @@ export function GameApp() {
   const placePick = (target: { type: "xi"; slotId: string } | { type: "bench"; index: number }) => {
     if (!state.offer || !state.formationId || !selectedPlayer) return;
     const formation = FORMATION_BY_ID[state.formationId];
-    const nextXi = { ...state.xi };
-    const nextBench = [...state.bench];
-    const alreadyDrafted =
-      Object.values(nextXi).some((player) => player?.id === selectedPlayer.id) ||
-      nextBench.some((player) => player?.id === selectedPlayer.id);
-
-    if (alreadyDrafted) {
-      if (target.type === "xi") {
-        const slot = formation.slots.find((item) => item.id === target.slotId);
-        if (!slot) return;
-        const occupant = nextXi[target.slotId];
-        const fromBench = nextBench.findIndex((player) => player?.id === selectedPlayer.id);
-        if (fromBench >= 0) {
-          nextBench[fromBench] = occupant;
-          nextXi[target.slotId] = selectedPlayer;
-        } else {
-          const fromSlot = Object.entries(nextXi).find(([, player]) => player?.id === selectedPlayer.id)?.[0];
-          if (!fromSlot || fromSlot === target.slotId) return;
-          nextXi[fromSlot] = occupant;
-          nextXi[target.slotId] = selectedPlayer;
-        }
-      } else {
-        if (nextBench[target.index]?.id === selectedPlayer.id) return;
-        const occupant = nextBench[target.index];
-        const fromSlot = Object.entries(nextXi).find(([, player]) => player?.id === selectedPlayer.id)?.[0];
-        const fromBench = nextBench.findIndex((player) => player?.id === selectedPlayer.id);
-        if (fromSlot) {
-          nextXi[fromSlot] = occupant;
-          nextBench[target.index] = selectedPlayer;
-        } else if (fromBench >= 0) {
-          nextBench[fromBench] = occupant;
-          nextBench[target.index] = selectedPlayer;
-        }
-      }
-      setSelectedPlayer(null);
-      setState({ ...state, xi: nextXi, bench: nextBench });
-      return;
-    }
-
-    if (!playerCanBePicked(selectedPlayer, formation, state.xi, state.bench)) return;
-
-    if (target.type === "xi") {
-      const slot = formation.slots.find((item) => item.id === target.slotId);
-      if (!slot) return;
-      if (nextXi[target.slotId]) return;
-      nextXi[target.slotId] = selectedPlayer;
-    } else if (nextBench[target.index]) {
-      if (selectedPlayer.group !== "GK" || nextBench.some((player) => player?.group === "GK")) return;
-      nextBench[target.index] = selectedPlayer;
-    } else {
-      nextBench[target.index] = selectedPlayer;
-    }
-
-    const usedPlayerIds = [...state.usedPlayerIds, selectedPlayer.playerId];
-    const usedClubSeasons = [
-      ...state.usedClubSeasons,
-      clubSeasonKey(state.offer.clubKey, state.offer.season),
-    ];
-    const complete = isDraftComplete(formation, nextXi, nextBench);
-    const offer = complete
-      ? state.offer
-      : pickRandomOffer(
-          clubSeasons,
-          new Set(usedClubSeasons),
-          new Set(usedPlayerIds),
-          state.formationId,
-          nextXi,
-          nextBench,
-        );
-
+    const next = applyDraftPlacement({
+      selected: selectedPlayer,
+      target,
+      formation,
+      formationId: state.formationId,
+      xi: state.xi,
+      bench: state.bench,
+      offer: state.offer,
+      usedPlayerIds: state.usedPlayerIds,
+      usedClubSeasons: state.usedClubSeasons,
+      clubSeasons,
+    });
+    if (!next) return;
     setSelectedPlayer(null);
     setState({
       ...state,
-      xi: nextXi,
-      bench: nextBench,
-      usedPlayerIds,
-      usedClubSeasons,
-      offer,
+      xi: next.xi,
+      bench: next.bench,
+      usedPlayerIds: next.usedPlayerIds,
+      usedClubSeasons: next.usedClubSeasons,
+      offer: next.offer,
     });
   };
 
@@ -319,6 +271,18 @@ export function GameApp() {
     setState({ ...emptyGame(), teamName: state.teamName || "Your XI" });
   };
 
+  if (pvp) {
+    return (
+      <PvpApp
+        initialRoom={urlRoom}
+        onLeave={() => {
+          setPvpMenu(false);
+          router.replace("/", { scroll: false });
+        }}
+      />
+    );
+  }
+
   if (!hydrated) {
     const pendingId = loadingLeague ?? savedMeta?.leagueId;
     return (
@@ -383,16 +347,26 @@ export function GameApp() {
             );
           })}
         </div>
-        {savedMeta ? (
+        <div className="flex flex-wrap gap-3">
           <button
             type="button"
             disabled={Boolean(loadingLeague)}
-            onClick={continueSaved}
-            className="w-fit rounded-2xl bg-white/10 px-6 py-3 font-semibold text-white"
+            onClick={() => setPvpMenu(true)}
+            className="rounded-2xl bg-amber-300 px-6 py-3 font-black uppercase tracking-widest text-emerald-950"
           >
-            Continue {LEAGUE_BY_ID[savedMeta.leagueId].name}
+            Play a friend
           </button>
-        ) : null}
+          {savedMeta ? (
+            <button
+              type="button"
+              disabled={Boolean(loadingLeague)}
+              onClick={continueSaved}
+              className="rounded-2xl bg-white/10 px-6 py-3 font-semibold text-white"
+            >
+              Continue {LEAGUE_BY_ID[savedMeta.leagueId].name}
+            </button>
+          ) : null}
+        </div>
       </main>
     );
   }
