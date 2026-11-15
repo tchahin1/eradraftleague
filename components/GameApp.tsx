@@ -450,7 +450,7 @@ export function GameApp() {
           formationId={state.formationId}
           xi={state.xi}
           bench={state.bench}
-          onNewGame={reset}
+          onNewGame={() => reset()}
           onPlayNext={playNextGameweek}
           onQuickSimRest={quickSimRest}
           onLineupChange={(xi, bench) => setState({ ...state, xi, bench })}
@@ -461,7 +461,7 @@ export function GameApp() {
 
   return (
     <main className="grid min-h-screen place-items-center">
-      <button type="button" onClick={reset} className="text-amber-300">
+      <button type="button" onClick={() => reset()} className="text-amber-300">
         Something got stuck — start over
       </button>
     </main>
