@@ -19,7 +19,7 @@ import {
   isDraftComplete,
   playInSlot,
 } from "@/lib/formations";
-import { LEAGUE_BY_ID, LEAGUES, STARTING_LEAGUE_ID, opponentCount, type LeagueId } from "@/lib/leagues";
+import { LEAGUE_BY_ID, STARTING_LEAGUE_ID, opponentCount, type LeagueId } from "@/lib/leagues";
 import {
   applyPlayerLineup,
   makeHistoricalLeagueTeam,
@@ -33,8 +33,10 @@ import {
 } from "@/lib/simulate";
 import { clearGame, emptyGame, loadGame, peekSavedGame, saveGame } from "@/lib/storage";
 import type { FormationId, GameState, PlayerSeason, SimMode } from "@/lib/types";
+import { BackButton } from "./BackButton";
 import { DraftScreen } from "./DraftScreen";
 import { FormationScreen } from "./FormationScreen";
+import { HomeHero, LeaguePicker } from "./LeaguePicker";
 import { MatchPitch } from "./MatchPitch";
 import { PvpApp } from "./PvpApp";
 import { SeasonScreen } from "./SeasonScreen";
@@ -56,6 +58,7 @@ export function GameApp() {
   const urlRoom = isRoomCode(roomParam) ? roomParam : null;
   const demoPitch = searchParams.get("demo") === "pitch";
   const [pvpMenu, setPvpMenu] = useState(false);
+  const [homeView, setHomeView] = useState<"modes" | "single">("modes");
   const pvp = pvpMenu || Boolean(urlRoom);
   const [players, setPlayers] = useState<PlayerSeason[] | null>(null);
   const [loadedLeagueId, setLoadedLeagueId] = useState<LeagueId | null>(null);
@@ -75,9 +78,11 @@ export function GameApp() {
   );
   const leagueInfo = state.leagueId ? LEAGUE_BY_ID[state.leagueId] : null;
   const previewLeagueId: LeagueId =
-    state.phase === "home"
-      ? (hoveredLeague ?? loadingLeague ?? STARTING_LEAGUE_ID)
-      : (state.leagueId ?? loadingLeague ?? STARTING_LEAGUE_ID);
+    state.phase === "home" && homeView === "modes"
+      ? STARTING_LEAGUE_ID
+      : state.phase === "home"
+        ? (hoveredLeague ?? loadingLeague ?? STARTING_LEAGUE_ID)
+        : (state.leagueId ?? loadingLeague ?? STARTING_LEAGUE_ID);
 
   useEffect(() => {
     setMounted(true);
@@ -113,30 +118,13 @@ export function GameApp() {
       setHydrated(true);
       return;
     }
-    const saved = peekSavedGame();
-    setSavedMeta(saved);
-    if (!saved) {
-      setHydrated(true);
-      return;
-    }
-    setLoadingLeague(saved.leagueId);
-    loadDataset(saved.leagueId)
-      .then((data) => {
-        setPlayers(data);
-        setLoadedLeagueId(saved.leagueId);
-        const restored = loadGame(data, saved.leagueId);
-        if (restored && restored.phase !== "home") setState(restored);
-        setHydrated(true);
-      })
-      .catch((err: Error) => {
-        setError(err.message);
-        setHydrated(true);
-      })
-      .finally(() => setLoadingLeague(null));
+    setSavedMeta(peekSavedGame());
+    setHydrated(true);
   }, [demoPitch]);
 
   useEffect(() => {
     if (!hydrated || pvp) return;
+    if (state.phase === "home") return;
     saveGame(state);
     setSavedMeta(peekSavedGame());
   }, [state, hydrated, pvp]);
@@ -303,10 +291,12 @@ export function GameApp() {
     });
   };
 
-  const reset = () => {
+  const reset = (view: "modes" | "single" = "modes") => {
     clearGame();
     setSelectedPlayer(null);
     setSavedMeta(null);
+    setPvpMenu(false);
+    setHomeView(view);
     setState({ ...emptyGame(), teamName: state.teamName || "Your XI" });
   };
 
@@ -318,6 +308,7 @@ export function GameApp() {
         initialRoom={urlRoom}
         onLeave={() => {
           setPvpMenu(false);
+          setHomeView("modes");
           router.replace("/", { scroll: false });
         }}
       />
@@ -352,76 +343,54 @@ export function GameApp() {
   if (state.phase === "home") {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center gap-6 px-6 py-16">
-        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">
-          Europe’s top five leagues
-        </p>
-        <h1 className="text-5xl font-black tracking-tight text-white md:text-6xl">Era Draft League</h1>
-        <p className="max-w-xl text-lg leading-8 text-emerald-100/80">
-          Pick a league. Get a random club from a random season. Pick one player. Repeat until you have a
-          custom XI and bench, then see if that side can win a fictional title race against other frozen eras.
-        </p>
-        {error ? <p className="max-w-xl text-sm text-rose-200">{error}</p> : null}
-        <div
-          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-          onMouseLeave={() => {
-            if (!loadingLeague) setHoveredLeague(null);
-          }}
-          onBlur={(event) => {
-            if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-            if (!loadingLeague) setHoveredLeague(null);
-          }}
-        >
-          {LEAGUES.map((league) => {
-            const busy = loadingLeague === league.id;
-            const previewId = hoveredLeague ?? loadingLeague ?? STARTING_LEAGUE_ID;
-            const isDefault = league.id === STARTING_LEAGUE_ID && previewId === STARTING_LEAGUE_ID;
-            const isHovered = hoveredLeague === league.id || loadingLeague === league.id;
-            return (
+        {homeView === "single" ? (
+          <BackButton
+            onClick={() => {
+              setHoveredLeague(null);
+              setHomeView("modes");
+            }}
+          />
+        ) : null}
+        <HomeHero error={error} />
+        {homeView === "modes" ? (
+          <div className="flex flex-col gap-3">
+            <div className="grid w-full max-w-xl grid-cols-2 gap-3">
               <button
-                key={league.id}
                 type="button"
-                data-card={league.id}
                 disabled={Boolean(loadingLeague)}
-                onClick={() => chooseLeague(league.id)}
-                onMouseEnter={() => setHoveredLeague(league.id)}
-                onFocus={() => setHoveredLeague(league.id)}
-                className={`league-card rounded-3xl p-5 text-left disabled:cursor-wait disabled:opacity-60 ${
-                  isDefault ? "league-card-start" : ""
-                } ${isHovered ? "league-card-hover" : ""}`}
+                onClick={() => setHomeView("single")}
+                className="rounded-2xl bg-amber-300 px-4 py-4 text-sm font-black uppercase tracking-widest text-emerald-950 sm:px-6 sm:text-base"
               >
-                <p className="league-card-country pl-2 text-xs font-semibold uppercase tracking-[0.25em]">
-                  {league.country}
-                </p>
-                <h2 className="mt-2 pl-2 text-3xl font-black text-white">{league.name}</h2>
-                <p className="mt-2 pl-2 text-sm text-emerald-100/70">
-                  {busy
-                    ? "Loading eras…"
-                    : `${league.teamCount} clubs · ${league.gameweeks} games · ${league.eraLabel}`}
-                </p>
+                Single player mode
               </button>
-            );
-          })}
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            disabled={Boolean(loadingLeague)}
-            onClick={() => setPvpMenu(true)}
-            className="rounded-2xl bg-amber-300 px-6 py-3 font-black uppercase tracking-widest text-emerald-950"
-          >
-            Play a friend
-          </button>
-          {savedMeta ? (
-            <button
-              type="button"
-              disabled={Boolean(loadingLeague)}
-              onClick={continueSaved}
-              className="rounded-2xl bg-white/10 px-6 py-3 font-semibold text-white"
-            >
-              Continue {LEAGUE_BY_ID[savedMeta.leagueId].name}
-            </button>
-          ) : null}
-        </div>
+              <button
+                type="button"
+                disabled={Boolean(loadingLeague)}
+                onClick={() => setPvpMenu(true)}
+                className="rounded-2xl bg-white/10 px-4 py-4 text-sm font-black uppercase tracking-widest text-white sm:px-6 sm:text-base"
+              >
+                PvP mode
+              </button>
+            </div>
+            {savedMeta ? (
+              <button
+                type="button"
+                disabled={Boolean(loadingLeague)}
+                onClick={continueSaved}
+                className="w-fit rounded-2xl bg-white/10 px-6 py-3 font-semibold text-white"
+              >
+                Continue {LEAGUE_BY_ID[savedMeta.leagueId].name}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <LeaguePicker
+            hoveredLeague={hoveredLeague}
+            loadingLeague={loadingLeague}
+            onHover={setHoveredLeague}
+            onChoose={chooseLeague}
+          />
+        )}
       </main>
     );
   }
@@ -432,9 +401,10 @@ export function GameApp() {
         <FormationScreen
           teamName={state.teamName}
           leagueName={leagueInfo.name}
-          onTeamName={(teamName) => setState({ ...state, teamName })}
+          placeholder="Your XI"
+          onTeamName={(teamName) => setState((current) => ({ ...current, teamName }))}
           onChoose={startDraft}
-          onBack={reset}
+          onBack={() => reset("single")}
         />
       </main>
     );

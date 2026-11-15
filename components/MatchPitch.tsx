@@ -15,6 +15,13 @@ import {
   type MatchSide,
   type PitchPoint,
 } from "@/lib/match-tape";
+import {
+  armMatchSfx,
+  isMatchSfxMuted,
+  playMatchSfx,
+  setMatchSfxMuted,
+  stopMatchSfx,
+} from "@/lib/match-sfx";
 import type { GoalScorer } from "@/lib/types";
 
 type Props = {
@@ -101,18 +108,25 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
   const leftNameRef = useRef<HTMLDivElement>(null);
   const rightNameRef = useRef<HTMLDivElement>(null);
   const playerRefs = useRef(new Map<string, HTMLDivElement>());
+  const cardRef = useRef<HTMLDivElement>(null);
   const onRevealRef = useRef(onReveal);
   const onClockRef = useRef(onClock);
   const onCompleteRef = useRef(onComplete);
   const skipRef = useRef(false);
   const doneRef = useRef(false);
   const goalsRef = useRef(0);
+  const [soundOn, setSoundOn] = useState(true);
 
   useEffect(() => {
     onRevealRef.current = onReveal;
     onClockRef.current = onClock;
     onCompleteRef.current = onComplete;
   }, [onReveal, onClock, onComplete]);
+
+  useEffect(() => {
+    armMatchSfx();
+    setSoundOn(!isMatchSfxMuted());
+  }, []);
 
   useEffect(() => {
     const { events, dots } = tape;
@@ -128,6 +142,7 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
     let lastUi = "";
     let lastClock = "";
     let lastEventId = "";
+    let lastSfxId = "";
     let liveBall: PitchPoint = { x: 50, y: 50 };
     let passLock: { key: string; from: PitchPoint; to: PitchPoint; loft: number } | null = null;
     let collecting = false;
@@ -141,6 +156,7 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
       const possessHome = event.teamId === home.id;
       const head = playhead(event, t);
       const rest = event.type === "ht" || event.type === "ft";
+      const setPiece = event.type === "freekick" || event.type === "corner" || event.type === "foul";
       const holderId = actorIdOf(liveDots, event, home.id, head.holderName, head.holderSlot);
       const receiverId = actorIdOf(liveDots, event, home.id, head.receiverName, head.receiverSlot);
       const involved = new Map<string, PitchPoint>();
@@ -153,13 +169,15 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
         event.type === "restart" ||
         event.type === "goal" ||
         event.type === "ht" ||
-        event.type === "ft";
+        event.type === "ft" ||
+        setPiece;
       const centerSpot = event.type === "kickoff" || event.type === "restart";
       if (event.id !== lastEventId) {
         lastEventId = event.id;
         passLock = null;
         collectMs = 0;
         collecting = !snapSpot && event.touches.length > 0;
+        if (setPiece && event.ball[0]) liveBall = { ...event.ball[0] };
       }
       const flightKey = `${event.id}:${head.phase}:${head.holderName}:${head.receiverName}`;
       if (head.phase === "pass" || head.phase === "shot") {
@@ -192,8 +210,14 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
       const mag = Math.hypot(tangent.x, tangent.y) || 1;
       const facing = { x: tangent.x / mag, y: tangent.y / mag };
 
+      const yellows = new Set<string>();
+      const reds = new Set<string>();
+      for (const item of events.slice(0, events.indexOf(event) + 1)) {
+        if (item.card === "yellow" && item.cardName) yellows.add(item.cardName);
+        if (item.card === "red" && item.cardName) reds.add(item.cardName);
+      }
       const possessTeam = possessHome ? "home" : "away";
-      const defenders = liveDots.filter((dot) => dot.team !== possessTeam && !dot.isGk);
+      const defenders = liveDots.filter((dot) => dot.team !== possessTeam && !dot.isGk && !reds.has(dot.name));
       const presser = defenders.slice().sort((a, b) => {
         const aPos = positions.get(a.id) ?? a.base;
         const bPos = positions.get(b.id) ?? b.base;
@@ -204,14 +228,17 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
       let holderBob = 0;
       liveDots.forEach((dot, index) => {
         const node = playerRefs.current.get(dot.id);
-        const possessing = (dot.team === "home") === possessHome && Boolean(event.teamId);
-        const shooting = head.phase === "shot" && dot.id === holderId && !event.walkIn;
+        const sentOff = reds.has(dot.name);
+        const booked = yellows.has(dot.name) && !sentOff;
+        const possessing = (dot.team === "home") === possessHome && Boolean(event.teamId) && !sentOff;
+        const shooting = head.phase === "shot" && dot.id === holderId && !event.walkIn && !sentOff;
         const chasing =
-          (dot.id === holderId && !onTheBall && head.phase !== "pass" && head.phase !== "shot") ||
-          (dot.id === receiverId && Boolean(passLock));
-        const isHolder = dot.id === holderId && head.phase === "hold" && !rest && onTheBall;
-        const isReceiver = dot.id === receiverId && head.phase === "pass" && !rest;
-        const pressing = presser?.id === dot.id && !possessing && !rest && !involved.has(dot.id);
+          !sentOff &&
+          ((dot.id === holderId && !onTheBall && head.phase !== "pass" && head.phase !== "shot") ||
+            (dot.id === receiverId && Boolean(passLock)));
+        const isHolder = dot.id === holderId && head.phase === "hold" && !rest && onTheBall && !sentOff;
+        const isReceiver = dot.id === receiverId && head.phase === "pass" && !rest && !sentOff;
+        const pressing = presser?.id === dot.id && !possessing && !rest && !involved.has(dot.id) && !sentOff;
         const current = positions.get(dot.id) ?? { ...dot.base };
         let target =
           shooting && passLock
@@ -224,12 +251,16 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
                   ? liveBall
                   : (involved.get(dot.id) ??
                     roleTarget(dot, focus, holderPos, facing, possessing, pressing, null, event.type, secondHalf));
-        if (!dot.isGk && !(event.walkIn && dot.id === holderId)) {
+        if (sentOff) {
+          target = { x: current.x, y: current.y < 50 ? 2.8 : 97.2 };
+        } else if (!dot.isGk && !(event.walkIn && dot.id === holderId) && !involved.has(dot.id)) {
           target = { x: Math.min(91, Math.max(9, target.x)), y: target.y };
         }
         const regroup = event.type === "kickoff" || event.type === "restart" || event.type === "ht";
         const steal = event.type === "turnover";
-        const speed = regroup
+        const speed = sentOff
+          ? 18
+          : regroup
           ? 42
           : chasing || (steal && involved.has(dot.id))
             ? 40
@@ -257,8 +288,18 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
         if (node) {
           node.style.left = `${pos.x}%`;
           node.style.top = `${pos.y + bob}%`;
+          node.style.opacity = sentOff ? "0.4" : "1";
+          node.style.boxShadow = sentOff
+            ? "0 0 0 2px #111, 0 0 0 4px #dc2626"
+            : booked
+              ? "0 0 0 2px #111, 0 0 0 4px #facc15"
+              : "";
           node.style.transform =
             isHolder || isReceiver ? "translate(-50%, -50%) scale(1.14)" : "translate(-50%, -50%)";
+          node.classList.toggle("ring-2", Boolean(dot.isGk || booked || sentOff));
+          node.classList.toggle("ring-yellow-300", booked);
+          node.classList.toggle("ring-red-500", sentOff);
+          node.classList.toggle("ring-white/80", Boolean(dot.isGk) && !booked && !sentOff);
         }
       });
 
@@ -268,6 +309,8 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
         ball = { x: 50, y: 50 };
       } else if (centerSpot && head.phase === "hold") {
         ball = { x: 50, y: 50 };
+      } else if (setPiece && head.phase === "hold") {
+        ball = onTheBall ? feet : (event.ball[0] ?? liveBall);
       } else if (passLock && (head.phase === "pass" || head.phase === "shot")) {
         ball = passBall(passLock.from, passLock.to, head.localT, passLock.loft);
       } else if (event.type === "goal" || event.type === "save") {
@@ -298,6 +341,17 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
         ballRef.current.style.top = `${ball.y}%`;
         ballRef.current.style.transform = `translate(-50%, -50%) scale(${1 + head.air * 0.75})`;
       }
+      if (cardRef.current) {
+        const show = event.type === "foul" && Boolean(event.card);
+        cardRef.current.style.opacity = show ? "1" : "0";
+        if (show) {
+          const fouler = liveDots.find((dot) => dot.name === event.cardName);
+          const at = fouler ? (positions.get(fouler.id) ?? fouler.base) : (event.ball[0] ?? ball);
+          cardRef.current.style.left = `${at.x + 2.4}%`;
+          cardRef.current.style.top = `${at.y - 7}%`;
+          cardRef.current.style.background = event.card === "red" ? "#dc2626" : "#facc15";
+        }
+      }
       return { ball, caption: head.caption, wait: collecting };
     };
 
@@ -306,6 +360,9 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
       if (event.type === "ft") return "Full time";
       if (event.type === "goal") return "Goal";
       if (event.type === "kickoff" || event.type === "restart") return "Kick off";
+      if (event.type === "foul") return event.card === "red" ? "Red card" : event.card === "yellow" ? "Yellow card" : "Foul";
+      if (event.type === "freekick") return "Free kick";
+      if (event.type === "corner") return "Corner";
       if (/shoots/i.test(shown)) return `${event.minute}'`;
       return `${event.minute}'`;
     };
@@ -336,6 +393,10 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
       }
       const event = events[eventIndex];
       if (!event) return;
+      if (event.id !== lastSfxId) {
+        lastSfxId = event.id;
+        playMatchSfx(event.type);
+      }
       const t = Math.min(1, elapsed / Math.max(1, event.durationMs));
       const { ball, caption, wait } = writePositions(event, now, t, dt);
       if (!wait) elapsed += dt;
@@ -350,7 +411,11 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
 
       const flash = event.type === "goal" && t < 0.5;
       const shown =
-        event.type === "goal" || event.type === "ht" || event.type === "ft" || event.type === "restart"
+        event.type === "goal" ||
+        event.type === "ht" ||
+        event.type === "ft" ||
+        event.type === "restart" ||
+        event.type === "foul"
           ? event.caption
           : caption;
       const ui = `${eventIndex}:${shown}:${flash ? 1 : 0}`;
@@ -382,13 +447,17 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
     const first = events[0]!;
     writePositions(first, performance.now(), 0, 16);
     raf = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(raf);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      stopMatchSfx();
+    };
   }, [tape, home.id]);
 
   const skip = () => {
     if (doneRef.current) return;
     doneRef.current = true;
     skipRef.current = true;
+    stopMatchSfx();
     onRevealRef.current?.(scorers.length);
     onClockRef.current?.("Full time");
     onCompleteRef.current?.();
@@ -421,6 +490,10 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
         <div
           ref={flashRef}
           className="pointer-events-none absolute inset-0 bg-white opacity-0 transition-opacity duration-200"
+        />
+        <div
+          ref={cardRef}
+          className="pointer-events-none absolute z-30 h-6 w-4 rounded-[2px] opacity-0 shadow-md transition-opacity duration-150"
         />
 
         {tape.dots.map((dot) => {
@@ -476,17 +549,31 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
       </div>
       <div className="mt-2 flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-emerald-100/50">
         <span ref={attackRef}>Home attacks right</span>
-        {!frame.done ? (
+        <div className="flex items-center gap-2">
+          {!frame.done ? (
+            <button
+              type="button"
+              onClick={skip}
+              className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-white/80 hover:text-white"
+            >
+              Skip
+            </button>
+          ) : (
+            <span>Full time</span>
+          )}
           <button
             type="button"
-            onClick={skip}
+            onClick={() => {
+              const next = !soundOn;
+              setSoundOn(next);
+              setMatchSfxMuted(!next);
+            }}
             className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-white/80 hover:text-white"
+            aria-pressed={soundOn}
           >
-            Skip
+            {soundOn ? "Sound" : "Muted"}
           </button>
-        ) : (
-          <span>Full time</span>
-        )}
+        </div>
         <span>Three-letter names</span>
       </div>
     </div>

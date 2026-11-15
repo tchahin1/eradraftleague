@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { FORMATION_BY_ID, FORMATIONS } from "@/lib/formations";
+import { BackButton } from "./BackButton";
 import { Pitch } from "./Pitch";
 import type { FormationId } from "@/lib/types";
 
@@ -8,6 +10,7 @@ type Props = {
   teamName: string;
   leagueName: string;
   backLabel?: string;
+  placeholder?: string;
   onTeamName: (value: string) => void;
   onChoose: (id: FormationId) => void;
   onBack: () => void;
@@ -17,19 +20,21 @@ export function FormationScreen({
   teamName,
   leagueName,
   backLabel = "Change league",
+  placeholder = "Club name",
   onTeamName,
   onChoose,
   onBack,
 }: Props) {
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const value = nameDraft ?? teamName;
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-8">
+      <BackButton onClick={onBack} label={backLabel} />
       <header className="space-y-3 text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-amber-300">
           {leagueName} · Step 1
         </p>
-        <button type="button" onClick={onBack} className="text-sm text-emerald-100/70 underline-offset-4 hover:underline">
-          {backLabel}
-        </button>
         <h1 className="text-4xl font-black tracking-tight text-white md:text-5xl">Pick your shape</h1>
         <p className="mx-auto max-w-xl text-emerald-100/75">
           Formation locks your eleven pitch slots. Anyone can play anywhere. Similar roles (CM into CAM or CDM) are only −1, especially when this shape has no natural slot for them. A true mismatch still drops up to 10. You will still draft a seven-man bench, including a backup goalkeeper.
@@ -37,9 +42,13 @@ export function FormationScreen({
         <label className="mx-auto mt-4 flex max-w-sm flex-col gap-1 text-left text-sm text-emerald-100/80">
           Club name
           <input
-            value={teamName}
-            onChange={(event) => onTeamName(event.target.value)}
-            className="rounded-xl border border-white/15 bg-emerald-950/70 px-3 py-2 text-white outline-none ring-amber-300/40 focus:ring-2"
+            value={value}
+            placeholder={placeholder}
+            onChange={(event) => {
+              setNameDraft(event.target.value);
+              onTeamName(event.target.value);
+            }}
+            className="rounded-xl border border-white/15 bg-emerald-950/70 px-3 py-2 text-white outline-none ring-amber-300/40 focus:ring-2 placeholder:text-white/35"
           />
         </label>
       </header>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { applyDraftPlacement, indexClubSeasons, pickRandomOffer, playerCanBePicked } from "@/lib/draft";
 import { loadDataset } from "@/lib/data";
@@ -10,7 +10,7 @@ import {
   emptyXi,
   FORMATION_BY_ID,
 } from "@/lib/formations";
-import { LEAGUE_BY_ID, LEAGUES, STARTING_LEAGUE_ID, type LeagueId } from "@/lib/leagues";
+import { LEAGUE_BY_ID, STARTING_LEAGUE_ID, type LeagueId } from "@/lib/leagues";
 import {
   isRoomCode,
   normalizeRoomCode,
@@ -24,8 +24,10 @@ import {
 import { inviteUrl, partyHost } from "@/lib/pvp-client";
 import { usePvpRoom } from "@/lib/usePvpRoom";
 import type { ClubSeason, FormationId, PlayerSeason } from "@/lib/types";
+import { BackButton } from "./BackButton";
 import { DraftScreen } from "./DraftScreen";
 import { FormationScreen } from "./FormationScreen";
+import { HomeHero, LeaguePicker } from "./LeaguePicker";
 import { PvpMatchScreen } from "./PvpMatchScreen";
 
 type Screen = "menu" | "room";
@@ -40,7 +42,6 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
   const configured = Boolean(partyHost());
   const [screen, setScreen] = useState<Screen>(initialRoom ? "room" : "menu");
   const [roomCode, setRoomCode] = useState(initialRoom);
-  const [joinInput, setJoinInput] = useState(initialRoom ?? "");
   const [hoveredLeague, setHoveredLeague] = useState<LeagueId | null>(null);
   const [creatingLeague, setCreatingLeague] = useState<LeagueId | null>(null);
   const { clientId, room, status, error, send, setError } = usePvpRoom(screen === "room" ? roomCode : null);
@@ -54,14 +55,16 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
   const [players, setPlayers] = useState<PlayerSeason[] | null>(null);
   const [loadedLeagueId, setLoadedLeagueId] = useState<LeagueId | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
-  const [nameDraft, setNameDraft] = useState("");
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const nameDraftRef = useRef(nameDraft);
+  nameDraftRef.current = nameDraft;
 
   const clubSeasons = useMemo(() => (players ? indexClubSeasons(players) : []), [players]);
   const bothHere = (room?.players.length ?? 0) >= 2;
   const inMatch = room?.phase === "match" && room.match;
   const link = roomCode ? inviteUrl(roomCode) : "";
-  const teamName = nameDraft || you?.teamName || "";
+  const teamName = nameDraft ?? you?.teamName ?? "";
   const loadingLeague = Boolean(leagueId && loadedLeagueId !== leagueId);
 
   useEffect(() => {
@@ -101,6 +104,7 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
     setScreen("menu");
     setRoomCode(null);
     setCreatingLeague(null);
+    setNameDraft(null);
     onLeave();
   };
 
@@ -108,10 +112,10 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
     if (status !== "open" || !roomCode) return;
     send({
       type: "hello",
-      teamName,
+      teamName: nameDraftRef.current ?? undefined,
       leagueId: creatingLeague ?? undefined,
     });
-  }, [status, roomCode, send, creatingLeague, teamName]);
+  }, [status, roomCode, send, creatingLeague]);
 
   const copyLink = async () => {
     if (!link) return;
@@ -124,81 +128,30 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
     }
   };
 
-  if (!configured) {
-    return (
-      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-4 px-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">Play a friend</p>
-        <h1 className="text-4xl font-black text-white">Room server not connected</h1>
-        <p className="text-emerald-100/80">
-          Live matches need the Cloudflare worker. Run <span className="text-amber-200">npm run party:dev</span> locally,
-          or deploy it and set <span className="text-amber-200">NEXT_PUBLIC_PARTY_HOST</span> on Vercel.
-        </p>
-        <button type="button" onClick={leave} className="w-fit text-sm text-emerald-100/70 underline-offset-4 hover:underline">
-          Back
-        </button>
-      </main>
-    );
-  }
-
   if (screen === "menu") {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center gap-8 px-6 py-16">
-        <div>
-          <button type="button" onClick={leave} className="text-sm text-emerald-100/70 underline-offset-4 hover:underline">
-            Back
-          </button>
-          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">Live match</p>
-          <h1 className="mt-2 text-5xl font-black text-white">Play a friend</h1>
-          <p className="mt-3 max-w-xl text-lg text-emerald-100/80">
-            You each draft an XI from the same league, then one match is simulated on the server so you both see the same
-            result.
-          </p>
-        </div>
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-300">Create a room</h2>
-          <p className="mt-2 text-sm text-emerald-100/70">Pick the league first. Your friend will use the same era pool.</p>
-          <div
-            className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-            onMouseLeave={() => setHoveredLeague(null)}
-          >
-            {LEAGUES.map((league) => (
-              <button
-                key={league.id}
-                type="button"
-                data-card={league.id}
-                onClick={() => openRoom(randomRoomCode(), league.id)}
-                onMouseEnter={() => setHoveredLeague(league.id)}
-                className={`league-card rounded-3xl p-5 text-left ${hoveredLeague === league.id ? "league-card-hover" : ""}`}
-              >
-                <p className="league-card-country pl-2 text-xs font-semibold uppercase tracking-[0.25em]">
-                  {league.country}
-                </p>
-                <h3 className="mt-2 pl-2 text-2xl font-black text-white">{league.name}</h3>
-              </button>
-            ))}
-          </div>
-        </section>
-        <section className="max-w-md">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.25em] text-amber-300">Join a room</h2>
-          <form
-            className="mt-3 flex gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              openRoom(joinInput);
-            }}
-          >
-            <input
-              value={joinInput}
-              onChange={(event) => setJoinInput(normalizeRoomCode(event.target.value))}
-              placeholder="CODE"
-              maxLength={4}
-              className="w-32 rounded-xl border border-white/15 bg-emerald-950/70 px-3 py-2 text-center text-lg font-black tracking-[0.3em] text-white uppercase outline-none ring-amber-300/40 focus:ring-2"
-            />
-            <button type="submit" className="rounded-xl bg-white/10 px-4 py-2 font-semibold text-white">
-              Join
-            </button>
-          </form>
-        </section>
+      <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col justify-center gap-6 px-6 py-16">
+        <BackButton onClick={leave} />
+        <HomeHero
+          error={
+            configured
+              ? error
+              : "Live matches need the Cloudflare worker. Run npm run party:dev locally, or deploy it and set NEXT_PUBLIC_PARTY_HOST on Vercel."
+          }
+        />
+        <LeaguePicker
+          hoveredLeague={hoveredLeague}
+          onHover={setHoveredLeague}
+          onChoose={(leagueId) => {
+            if (!configured) {
+              setError(
+                "Live matches need the Cloudflare worker. Run npm run party:dev locally, or set NEXT_PUBLIC_PARTY_HOST.",
+              );
+              return;
+            }
+            openRoom(randomRoomCode(), leagueId);
+          }}
+        />
       </main>
     );
   }
@@ -258,9 +211,7 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
   if (!bothHere) {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-5 px-6">
-        <button type="button" onClick={leave} className="w-fit text-sm text-emerald-100/70 underline-offset-4 hover:underline">
-          Leave room
-        </button>
+        <BackButton onClick={leave} label="Leave room" />
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">
           {leagueInfo?.name ?? "Waiting"}
         </p>
@@ -280,11 +231,12 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
           Your club name
           <input
             value={teamName}
+            placeholder="Club name"
             onChange={(event) => {
               setNameDraft(event.target.value);
               send({ type: "set-profile", teamName: event.target.value });
             }}
-            className="rounded-xl border border-white/15 bg-emerald-950/70 px-3 py-2 text-white outline-none ring-amber-300/40 focus:ring-2"
+            className="rounded-xl border border-white/15 bg-emerald-950/70 px-3 py-2 text-white outline-none ring-amber-300/40 focus:ring-2 placeholder:text-white/35"
           />
         </label>
         {youHost && !room.leagueId ? (
@@ -424,14 +376,12 @@ function PvpSession({
               {opponent ? ` · vs ${opponent.teamName}` : ""}
               {opponent && !opponent.connected ? " · disconnected" : ""}
             </p>
-            <button type="button" onClick={onLeave} className="text-sm text-emerald-100/70 underline-offset-4 hover:underline">
-              Leave
-            </button>
           </div>
         </div>
         <FormationScreen
           teamName={teamName}
           leagueName={`${leagueName} · live match`}
+          placeholder="Club name"
           onTeamName={onTeamName}
           onChoose={startLocalDraft}
           onBack={onLeave}

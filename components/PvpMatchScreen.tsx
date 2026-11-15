@@ -152,12 +152,12 @@ export function PvpMatchScreen({
         />
       </section>
 
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Lineup squad={match.homeSquad} you={match.homeId === youId} />
+        <Lineup squad={match.awaySquad} you={match.awayId === youId} />
+      </div>
       {done ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Lineup squad={match.homeSquad} you={match.homeId === youId} />
-            <Lineup squad={match.awaySquad} you={match.awayId === youId} />
-          </div>
           {!opponentConnected ? (
             <p className="text-center text-sm text-rose-200">Opponent disconnected. You can still leave or wait.</p>
           ) : null}
