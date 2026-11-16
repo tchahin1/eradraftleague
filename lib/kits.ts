@@ -112,15 +112,61 @@ export function kitPatternClass(choice: KitChoice | undefined): string {
   return pattern === "solid" ? "kit-face" : `kit-face kit-${pattern}`;
 }
 
+function kitImage(pattern: KitChoice["pattern"], primary: string, secondary: string): string {
+  if (pattern === "stripes") {
+    return `repeating-linear-gradient(90deg, ${primary} 0px, ${primary} 5px, ${secondary} 5px, ${secondary} 9px)`;
+  }
+  if (pattern === "hoops") {
+    return `repeating-linear-gradient(${primary} 0px, ${primary} 5px, ${secondary} 5px, ${secondary} 9px)`;
+  }
+  if (pattern === "sash") {
+    return `linear-gradient(125deg, ${primary} 0% 38%, ${secondary} 38% 62%, ${primary} 62% 100%)`;
+  }
+  if (pattern === "halves") return `linear-gradient(90deg, ${primary} 50%, ${secondary} 50%)`;
+  return "none";
+}
+
 export function kitVars(choice: KitChoice | undefined, fallback: KitChoice = DEFAULT_HOME_KIT) {
-  const style = kitStyle(choice, fallback);
+  const kit = readKit(choice, fallback);
+  const style = kitStyle(kit, fallback);
   return {
     backgroundColor: style.primary,
+    backgroundImage: kitImage(kit.pattern, style.primary, style.secondary),
     color: style.text,
     "--kit-a": style.primary,
     "--kit-b": style.secondary,
     "--kit-ink": style.text,
   } as const;
+}
+
+function hashKit(input: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function kitFromSeed(seed: string): KitChoice {
+  const hash = hashKit(seed);
+  const color = KIT_COLORS[hash % KIT_COLORS.length]!.id;
+  let secondary = KIT_COLORS[(hash >>> 8) % KIT_COLORS.length]!.id;
+  if (secondary === color) secondary = KIT_COLORS[(hash + 3) % KIT_COLORS.length]!.id;
+  const pattern = KIT_PATTERNS[(hash >>> 16) % KIT_PATTERNS.length]!.id;
+  return { color, secondary, pattern };
+}
+
+export function kitDistinctFrom(seed: string, other: KitChoice): KitChoice {
+  let kit = kitFromSeed(seed);
+  for (let bump = 1; kitsClash(kit, other) && bump < 8; bump += 1) {
+    kit = kitFromSeed(`${seed}:${bump}`);
+  }
+  if (!kitsClash(kit, other)) return kit;
+  const pattern = KIT_PATTERNS.find((item) => item.id !== other.pattern)?.id ?? "stripes";
+  const color = KIT_COLORS.find((item) => item.id !== other.color)?.id ?? "red";
+  const secondary = other.secondary === "white" ? "black" : "white";
+  return { color, secondary, pattern };
 }
 
 export function kitsClash(a: KitChoice, b: KitChoice) {

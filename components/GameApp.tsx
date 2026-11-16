@@ -37,6 +37,7 @@ import { BackButton } from "./BackButton";
 import { DraftScreen } from "./DraftScreen";
 import { FormationScreen } from "./FormationScreen";
 import { HomeHero, LeaguePicker } from "./LeaguePicker";
+import { KitPicker } from "./KitPicker";
 import { MatchPitch } from "./MatchPitch";
 import { PvpApp } from "./PvpApp";
 import { SeasonScreen } from "./SeasonScreen";
@@ -196,6 +197,7 @@ export function GameApp() {
       phase: "draft",
       leagueId: state.leagueId,
       teamName: state.teamName.trim() || "Your XI",
+      kit: state.kit,
       formationId,
       xi,
       bench,
@@ -424,6 +426,14 @@ export function GameApp() {
   if (state.phase === "formation" && leagueInfo) {
     return (
       <main>
+        <div className="mx-auto max-w-6xl px-4 pt-20">
+          <div className="rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
+            <KitPicker
+              kit={state.kit}
+              onChange={(kit) => setState((current) => ({ ...current, kit }))}
+            />
+          </div>
+        </div>
         <FormationScreen
           teamName={state.teamName}
           leagueName={leagueInfo.name}
@@ -439,6 +449,14 @@ export function GameApp() {
   if (state.phase === "draft" && state.formationId && state.offer && leagueInfo) {
     return (
       <main>
+        <div className="mx-auto max-w-7xl px-4 pt-6">
+          <div className="rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
+            <KitPicker
+              kit={state.kit}
+              onChange={(kit) => setState((current) => ({ ...current, kit }))}
+            />
+          </div>
+        </div>
         <DraftScreen
           teamName={state.teamName}
           leagueName={leagueInfo.name}
@@ -476,6 +494,8 @@ export function GameApp() {
           formationId={state.formationId}
           xi={state.xi}
           bench={state.bench}
+          kit={state.kit}
+          onKit={(kit) => setState((current) => ({ ...current, kit }))}
           onNewGame={() => reset()}
           onPlayNext={playNextGameweek}
           onQuickSimRest={quickSimRest}

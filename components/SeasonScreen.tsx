@@ -15,7 +15,9 @@ import {
   FORMATION_BY_ID,
 } from "@/lib/formations";
 import type { FormationId, GoalScorer, LeagueState, MatchResult, PlayerSeason } from "@/lib/types";
+import { DEFAULT_HOME_KIT, kitDistinctFrom, kitFromSeed, kitPatternClass, kitVars, readKit, type KitChoice } from "@/lib/kits";
 import { inferFormation, type MatchSide } from "@/lib/match-tape";
+import { KitPicker } from "./KitPicker";
 import { MatchPitch } from "./MatchPitch";
 import { Pitch } from "./Pitch";
 import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
@@ -35,6 +37,8 @@ type Props = {
   formationId?: FormationId | null;
   xi?: Record<string, PlayerSeason | null>;
   bench?: (PlayerSeason | null)[];
+  kit?: KitChoice;
+  onKit?: (kit: KitChoice) => void;
   onNewGame: () => void;
   onPlayNext?: () => void;
   onQuickSimRest?: () => void;
@@ -76,6 +80,14 @@ function benchForSide(
   return league.teams.find((team) => team.id === teamId)?.bench ?? [];
 }
 
+function kitsForFixture(homeId: string, awayId: string, playerKit: KitChoice) {
+  const yours = readKit(playerKit, DEFAULT_HOME_KIT);
+  if (homeId === PLAYER_TEAM_ID) return { home: yours, away: kitDistinctFrom(awayId, yours) };
+  if (awayId === PLAYER_TEAM_ID) return { home: kitDistinctFrom(homeId, yours), away: yours };
+  const home = kitFromSeed(homeId);
+  return { home, away: kitDistinctFrom(awayId, home) };
+}
+
 function MatchLineup({
   side,
   bench,
@@ -86,12 +98,21 @@ function MatchLineup({
   you: boolean;
 }) {
   const formation = FORMATION_BY_ID[side.formationId];
+  const kit = side.kit ?? (you ? DEFAULT_HOME_KIT : kitFromSeed(side.id));
   return (
     <div className="rounded-3xl border border-white/10 bg-emerald-950/40 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-300">
         {you ? "Your XI" : "Their XI"} · {formation.name}
       </p>
-      <h2 className="mt-1 text-2xl font-black text-white">{side.name}</h2>
+      <h2 className="mt-1 flex items-center gap-2 text-2xl font-black text-white">
+        <span
+          className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[8px] ${kitPatternClass(kit)}`}
+          style={kitVars(kit)}
+        >
+          XI
+        </span>
+        {side.name}
+      </h2>
       <div className="mt-3 max-w-sm">
         <Pitch formationId={side.formationId} xi={xiRecordFromSide(side)} interactive={false} />
       </div>
@@ -458,6 +479,8 @@ export function SeasonScreen({
   formationId,
   xi,
   bench,
+  kit = DEFAULT_HOME_KIT,
+  onKit,
   onNewGame,
   onPlayNext,
   onQuickSimRest,
@@ -501,14 +524,15 @@ export function SeasonScreen({
   const liveScore = watching ? runningScore(watching.match, watching.revealed) : null;
   const watchStatus = watching ? (watching.done ? "Full time" : clock) : null;
   const watchMatch = watching?.match;
-  const watchHome = useMemo(
-    () => (watchMatch ? matchSide(league, watchMatch.homeId, formationId, xi) : null),
-    [watchMatch, league, formationId, xi],
-  );
-  const watchAway = useMemo(
-    () => (watchMatch ? matchSide(league, watchMatch.awayId, formationId, xi) : null),
-    [watchMatch, league, formationId, xi],
-  );
+  const watched = useMemo(() => {
+    if (!watchMatch) return { home: null, away: null };
+    const home = matchSide(league, watchMatch.homeId, formationId, xi);
+    const away = matchSide(league, watchMatch.awayId, formationId, xi);
+    const kits = kitsForFixture(home.id, away.id, kit);
+    return { home: { ...home, kit: kits.home }, away: { ...away, kit: kits.away } };
+  }, [watchMatch, league, formationId, xi, kit]);
+  const watchHome = watched.home;
+  const watchAway = watched.away;
   const onWatchReveal = useCallback((count: number) => {
     setWatching((current) => (current ? { ...current, revealed: count } : current));
   }, []);
@@ -620,6 +644,21 @@ export function SeasonScreen({
               {teamNameOf(league, nextFixture.awayId)}
             </div>
           </div>
+          {onKit ? (
+            <div className="mt-5 rounded-2xl border border-white/10 bg-emerald-950/50 px-4 py-3">
+              <KitPicker
+                kit={kit}
+                opponentKit={
+                  nextFixture
+                    ? kitsForFixture(nextFixture.homeId, nextFixture.awayId, kit)[
+                        nextFixture.homeId === PLAYER_TEAM_ID ? "away" : "home"
+                      ]
+                    : undefined
+                }
+                onChange={onKit}
+              />
+            </div>
+          ) : null}
           {formationId && xi && bench && onLineupChange ? (
             <LineupEditor
               formationId={formationId}
@@ -698,6 +737,19 @@ export function SeasonScreen({
                   {teamNameOf(league, nextFixture.awayId)}
                 </div>
               </div>
+              {onKit ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-emerald-950/50 px-4 py-3">
+                  <KitPicker
+                    kit={kit}
+                    opponentKit={
+                      kitsForFixture(nextFixture.homeId, nextFixture.awayId, kit)[
+                        nextFixture.homeId === PLAYER_TEAM_ID ? "away" : "home"
+                      ]
+                    }
+                    onChange={onKit}
+                  />
+                </div>
+              ) : null}
               <LineupEditor
                 formationId={formationId}
                 xi={xi}

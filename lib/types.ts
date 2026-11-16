@@ -1,3 +1,4 @@
+import type { KitChoice } from "./kits";
 import type { LeagueId } from "./leagues";
 
 export type PositionGroup = "GK" | "DEF" | "MID" | "FWD";
@@ -123,6 +124,7 @@ export type GameState = {
   phase: GamePhase;
   leagueId: LeagueId | null;
   teamName: string;
+  kit: KitChoice;
   formationId: FormationId | null;
   xi: Record<string, PlayerSeason | null>;
   bench: (PlayerSeason | null)[];

@@ -1,5 +1,6 @@
 import { REROLLS_PER_DRAFT } from "./draft";
 import { FORMATION_BY_ID } from "./formations";
+import { DEFAULT_HOME_KIT, readKit } from "./kits";
 import { isLeagueId, type LeagueId } from "./leagues";
 import type { FormationId, GameState, PlayerSeason } from "./types";
 
@@ -11,6 +12,7 @@ type SavedGame = {
   leagueId?: LeagueId;
   phase: GameState["phase"];
   teamName: string;
+  kit?: GameState["kit"];
   formationId: FormationId | null;
   xi: Record<string, string | null>;
   bench: (string | null)[];
@@ -32,6 +34,7 @@ export function emptyGame(): GameState {
     phase: "home",
     leagueId: null,
     teamName: "Your XI",
+    kit: DEFAULT_HOME_KIT,
     formationId: null,
     xi: {},
     bench: [],
@@ -75,6 +78,7 @@ export function saveGame(state: GameState): void {
     leagueId: state.leagueId ?? undefined,
     phase: state.phase,
     teamName: state.teamName,
+    kit: state.kit,
     formationId: state.formationId,
     xi: Object.fromEntries(Object.entries(state.xi).map(([id, player]) => [id, player?.id ?? null])),
     bench: state.bench.map((player) => player?.id ?? null),
@@ -115,6 +119,7 @@ export function loadGame(players: PlayerSeason[], expectedLeagueId?: LeagueId): 
       phase: saved.phase,
       leagueId,
       teamName: saved.teamName || "Your XI",
+      kit: readKit(saved.kit, DEFAULT_HOME_KIT),
       formationId: saved.formationId,
       xi,
       bench: (saved.bench ?? []).map((id) => (id ? (byId.get(id) ?? null) : null)),

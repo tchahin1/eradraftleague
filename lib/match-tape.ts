@@ -1,5 +1,5 @@
 import { FORMATION_BY_ID, groupFromSlot, positionPenalty } from "./formations";
-import type { KitChoice } from "./kits";
+import { kitDistinctFrom, kitFromSeed, type KitChoice } from "./kits";
 import { pitchSurname } from "./photos";
 import { autoSelectXi } from "./simulate";
 import type { FormationId, GoalScorer, PlayerSeason, SlotKind } from "./types";
@@ -1410,17 +1410,23 @@ export function previewMatchFromPlayers(players: PlayerSeason[]): {
   const clubs = [...byClubSeason.values()].filter((squad) => squad.length >= 14);
   const homeSquad = autoSelectXi(clubs[0] ?? players);
   const awaySquad = autoSelectXi(clubs[1] ?? players.slice(30));
+  const homeName = homeSquad.xi[0]?.club ?? "Home";
+  const awayName = awaySquad.xi[0]?.club ?? "Away";
+  const homeKit = kitFromSeed(homeName);
+  const awayKit = kitDistinctFrom(awayName, homeKit);
   const home: MatchSide = {
     id: "home",
-    name: homeSquad.xi[0]?.club ?? "Home",
+    name: homeName,
     formationId: inferFormation(homeSquad.xi),
     xi: homeSquad.xi,
+    kit: homeKit,
   };
   const away: MatchSide = {
     id: "away",
-    name: awaySquad.xi[0]?.club ?? "Away",
+    name: awayName,
     formationId: inferFormation(awaySquad.xi),
     xi: awaySquad.xi,
+    kit: awayKit,
   };
   const homeForward = home.xi.find((player) => player.group === "FWD") ?? home.xi[10];
   const awayForward = away.xi.find((player) => player.group === "FWD") ?? away.xi[10];
