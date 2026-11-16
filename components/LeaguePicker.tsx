@@ -10,8 +10,8 @@ export function HomeHero({ error }: { error?: string | null }) {
       </p>
       <h1 className="text-5xl font-black tracking-tight text-white md:text-6xl">Era Draft League</h1>
       <p className="max-w-xl text-lg leading-8 text-emerald-100/80">
-        Pick a league. Get a random club from a random season. Pick one player. Repeat until you have a
-        custom XI and bench, then see if that side can win a fictional title race against other frozen eras.
+        Draft an XI from random club-seasons in Europe's top five leagues and win the EDL title race, or
+        challenge a friend and see who drafts better.
       </p>
       {error ? <p className="max-w-xl text-sm text-rose-200">{error}</p> : null}
     </>
