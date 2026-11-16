@@ -24,10 +24,12 @@ import {
 import { inviteUrl, partyHost } from "@/lib/pvp-client";
 import { usePvpRoom } from "@/lib/usePvpRoom";
 import type { ClubSeason, FormationId, PlayerSeason } from "@/lib/types";
+import { DEFAULT_HOME_KIT, type KitChoice } from "@/lib/kits";
 import { BackButton } from "./BackButton";
 import { DraftScreen } from "./DraftScreen";
 import { FormationScreen } from "./FormationScreen";
 import { HomeHero, LeaguePicker } from "./LeaguePicker";
+import { KitPicker } from "./KitPicker";
 import { PvpMatchScreen } from "./PvpMatchScreen";
 
 type Screen = "menu" | "room";
@@ -239,6 +241,13 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
             className="rounded-xl border border-white/15 bg-emerald-950/70 px-3 py-2 text-white outline-none ring-amber-300/40 focus:ring-2 placeholder:text-white/35"
           />
         </label>
+        {you ? (
+          <KitPicker
+            kit={you.kit ?? DEFAULT_HOME_KIT}
+            opponentKit={opponent?.kit}
+            onChange={(kit) => send({ type: "set-kit", kit })}
+          />
+        ) : null}
         {youHost && !room.leagueId ? (
           <p className="text-sm text-amber-200">This room has no league yet. Leave and create a new one.</p>
         ) : null}
@@ -270,6 +279,7 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
         setNameDraft(value);
         send({ type: "set-profile", teamName: value });
       }}
+      onKit={(kit) => send({ type: "set-kit", kit })}
       onLeave={leave}
     />
   );
@@ -284,6 +294,7 @@ function PvpSession({
   clubSeasons,
   send,
   onTeamName,
+  onKit,
   onLeave,
 }: {
   room: PvpRoomPublic;
@@ -294,6 +305,7 @@ function PvpSession({
   clubSeasons: ClubSeason[];
   send: (message: ClientMessage) => void;
   onTeamName: (value: string) => void;
+  onKit: (kit: KitChoice) => void;
   onLeave: () => void;
 }) {
   const [formationId, setFormationId] = useState<FormationId | null>(null);
@@ -377,6 +389,11 @@ function PvpSession({
               {opponent && !opponent.connected ? " · disconnected" : ""}
             </p>
           </div>
+          {you ? (
+            <div className="mt-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
+              <KitPicker kit={you.kit ?? DEFAULT_HOME_KIT} opponentKit={opponent?.kit} onChange={onKit} />
+            </div>
+          ) : null}
         </div>
         <FormationScreen
           teamName={teamName}
@@ -404,6 +421,11 @@ function PvpSession({
             Leave
           </button>
         </div>
+        {you ? (
+          <div className="mt-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
+            <KitPicker kit={you.kit ?? DEFAULT_HOME_KIT} opponentKit={opponent?.kit} onChange={onKit} />
+          </div>
+        ) : null}
       </div>
       <DraftScreen
         teamName={teamName}

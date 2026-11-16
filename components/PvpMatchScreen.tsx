@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { FORMATION_BY_ID } from "@/lib/formations";
+import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, kitPatternClass, kitStyle, kitVars, type KitChoice } from "@/lib/kits";
 import { squadToXiRecord, type PvpMatch, type PvpSquad } from "@/lib/pvp";
 import type { GoalScorer } from "@/lib/types";
 import { MatchPitch } from "./MatchPitch";
@@ -14,6 +15,7 @@ type Props = {
   rematchPending: boolean;
   opponentRematch: boolean;
   opponentConnected: boolean;
+  kicker?: string;
   onRematch: () => void;
   onLeave: () => void;
 };
@@ -44,14 +46,23 @@ function ScorerList({ scorers, align }: { scorers: GoalScorer[]; align: "left" |
   );
 }
 
-function Lineup({ squad, you }: { squad: PvpSquad; you: boolean }) {
+function Lineup({ squad, you, kit }: { squad: PvpSquad; you: boolean; kit?: KitChoice }) {
   const formation = FORMATION_BY_ID[squad.formationId];
+  const choice = kit ?? (you ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT);
   return (
     <div className="rounded-3xl border border-white/10 bg-emerald-950/40 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-300">
         {you ? "Your XI" : "Their XI"} · {formation.name}
       </p>
-      <h2 className="mt-1 text-2xl font-black text-white">{squad.teamName}</h2>
+      <h2 className="mt-1 flex items-center gap-2 text-2xl font-black text-white">
+        <span
+          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[8px] ${kitPatternClass(choice)}`}
+          style={kitVars(choice)}
+        >
+          XI
+        </span>
+        {squad.teamName}
+      </h2>
       <div className="mt-3 max-w-sm">
         <Pitch formationId={squad.formationId} xi={squadToXiRecord(squad)} interactive={false} />
       </div>
@@ -74,6 +85,7 @@ export function PvpMatchScreen({
   rematchPending,
   opponentRematch,
   opponentConnected,
+  kicker = "Friendly · one match",
   onRematch,
   onLeave,
 }: Props) {
@@ -92,8 +104,9 @@ export function PvpMatchScreen({
       name: match.homeName,
       formationId: match.homeSquad.formationId,
       xi: match.homeSquad.xi,
+      kit: match.homeKit,
     }),
-    [match.homeId, match.homeName, match.homeSquad],
+    [match.homeId, match.homeName, match.homeKit, match.homeSquad],
   );
   const awaySide = useMemo(
     () => ({
@@ -101,8 +114,9 @@ export function PvpMatchScreen({
       name: match.awayName,
       formationId: match.awaySquad.formationId,
       xi: match.awaySquad.xi,
+      kit: match.awayKit,
     }),
-    [match.awayId, match.awayName, match.awaySquad],
+    [match.awayId, match.awayName, match.awayKit, match.awaySquad],
   );
   const onMatchComplete = useCallback(() => {
     setRevealed(match.scorers.length);
@@ -112,13 +126,16 @@ export function PvpMatchScreen({
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8">
       <section className="rounded-3xl border border-amber-300/40 bg-emerald-950 p-8">
-        <p className="text-center text-xs uppercase tracking-[0.3em] text-amber-300">Friendly · one match</p>
+        <p className="text-center text-xs uppercase tracking-[0.3em] text-amber-300">{kicker}</p>
         <p className="mt-2 text-center text-sm font-semibold uppercase tracking-[0.2em] text-emerald-100/70">
           {status}
         </p>
         <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-start gap-4">
           <div className="text-right">
-            <div className={`text-lg font-black leading-tight ${match.homeId === youId ? "text-amber-200" : "text-white"}`}>
+            <div
+              className="text-lg font-black leading-tight"
+              style={{ color: kitStyle(match.homeKit, DEFAULT_HOME_KIT).label }}
+            >
               {match.homeName}
             </div>
             <ScorerList scorers={live.scorers.filter((goal) => goal.teamId === match.homeId)} align="right" />
@@ -129,7 +146,10 @@ export function PvpMatchScreen({
             </div>
           </div>
           <div className="text-left">
-            <div className={`text-lg font-black leading-tight ${match.awayId === youId ? "text-amber-200" : "text-white"}`}>
+            <div
+              className="text-lg font-black leading-tight"
+              style={{ color: kitStyle(match.awayKit, DEFAULT_AWAY_KIT).label }}
+            >
               {match.awayName}
             </div>
             <ScorerList scorers={live.scorers.filter((goal) => goal.teamId === match.awayId)} align="left" />
@@ -153,8 +173,8 @@ export function PvpMatchScreen({
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Lineup squad={match.homeSquad} you={match.homeId === youId} />
-        <Lineup squad={match.awaySquad} you={match.awayId === youId} />
+        <Lineup squad={match.homeSquad} you={match.homeId === youId} kit={match.homeKit} />
+        <Lineup squad={match.awaySquad} you={match.awayId === youId} kit={match.awayKit} />
       </div>
       {done ? (
         <>

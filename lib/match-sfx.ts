@@ -6,10 +6,13 @@ let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 let muted = false;
 let armed = false;
-let cheerBuf: AudioBuffer | null = null;
-let cheerWait: Promise<AudioBuffer | null> | null = null;
+let cheerBufs: AudioBuffer[] | null = null;
+let cheerWait: Promise<AudioBuffer[] | null> | null = null;
 const live = new Set<AudioScheduledSourceNode>();
-const CHEER_SRC = "/sfx/goal-cheer.mp3";
+const CHEER_LAYERS = [
+  { src: "/sfx/goal-roar.mp3", gain: 0.95, delay: 0, rate: 1 },
+  { src: "/sfx/goal-shout.mp3", gain: 0.7, delay: 0.04, rate: 1.02 },
+] as const;
 
 function readMuted() {
   if (typeof window === "undefined") return false;
@@ -33,18 +36,22 @@ function getCtx() {
   return ctx;
 }
 
+function decodeSfx(audio: AudioContext, src: string) {
+  return fetch(src)
+    .then((res) => {
+      if (!res.ok) throw new Error(src);
+      return res.arrayBuffer();
+    })
+    .then((bytes) => audio.decodeAudioData(bytes.slice(0)));
+}
+
 function loadCheer(audio: AudioContext) {
-  if (cheerBuf) return Promise.resolve(cheerBuf);
+  if (cheerBufs) return Promise.resolve(cheerBufs);
   if (!cheerWait) {
-    cheerWait = fetch(CHEER_SRC)
-      .then((res) => {
-        if (!res.ok) throw new Error("cheer missing");
-        return res.arrayBuffer();
-      })
-      .then((bytes) => audio.decodeAudioData(bytes.slice(0)))
-      .then((buf) => {
-        cheerBuf = buf;
-        return buf;
+    cheerWait = Promise.all(CHEER_LAYERS.map((layer) => decodeSfx(audio, layer.src)))
+      .then((bufs) => {
+        cheerBufs = bufs;
+        return bufs;
       })
       .catch(() => {
         cheerWait = null;
@@ -62,7 +69,9 @@ function track(node: AudioScheduledSourceNode) {
 export function armMatchSfx() {
   if (typeof window === "undefined" || armed) return;
   armed = true;
+  const before = muted;
   muted = readMuted();
+  if (muted !== before) for (const listener of muteListeners) listener();
   const unlock = () => {
     getCtx();
     window.removeEventListener("pointerdown", unlock);
@@ -76,8 +85,18 @@ export function isMatchSfxMuted() {
   return muted;
 }
 
+const muteListeners = new Set<() => void>();
+
+export function subscribeMatchSfxMuted(listener: () => void) {
+  muteListeners.add(listener);
+  return () => {
+    muteListeners.delete(listener);
+  };
+}
+
 export function setMatchSfxMuted(next: boolean) {
   muted = next;
+  for (const listener of muteListeners) listener();
   if (typeof window !== "undefined") {
     window.localStorage.setItem(MUTE_KEY, next ? "1" : "0");
   }
@@ -135,33 +154,47 @@ function tweets(count: number, freq: number, gap: number, duration: number) {
   for (let i = 0; i < count; i += 1) whistle(audio, master, now + i * gap, duration, freq);
 }
 
-function playCheerBuffer(audio: AudioContext, buffer: AudioBuffer) {
+function playCheerBuffer(
+  audio: AudioContext,
+  buffer: AudioBuffer,
+  gain: number,
+  delay: number,
+  rate: number,
+) {
   if (!master || muted) return;
   const src = audio.createBufferSource();
   const amp = audio.createGain();
-  const now = audio.currentTime;
+  const now = audio.currentTime + delay;
   src.buffer = buffer;
+  src.playbackRate.value = rate;
   amp.gain.setValueAtTime(0.0001, now);
-  amp.gain.exponentialRampToValueAtTime(0.9, now + 0.03);
-  const fade = now + Math.min(1.85, Math.max(1.1, buffer.duration - 0.45));
-  amp.gain.setValueAtTime(0.9, fade);
-  amp.gain.exponentialRampToValueAtTime(0.0001, fade + 0.45);
+  amp.gain.exponentialRampToValueAtTime(gain, now + 0.05);
+  const hold = now + 1.7;
+  amp.gain.setValueAtTime(gain, hold);
+  amp.gain.exponentialRampToValueAtTime(0.0001, hold + 0.7);
   src.connect(amp);
   amp.connect(master);
   src.start(now);
-  src.stop(fade + 0.5);
+  src.stop(hold + 0.75);
   track(src);
+}
+
+function startCheer(audio: AudioContext, bufs: AudioBuffer[]) {
+  CHEER_LAYERS.forEach((layer, index) => {
+    const buffer = bufs[index];
+    if (buffer) playCheerBuffer(audio, buffer, layer.gain, layer.delay, layer.rate);
+  });
 }
 
 function cheer() {
   const audio = getCtx();
   if (!audio || !master || muted) return;
-  if (cheerBuf) {
-    playCheerBuffer(audio, cheerBuf);
+  if (cheerBufs) {
+    startCheer(audio, cheerBufs);
     return;
   }
-  void loadCheer(audio).then((buf) => {
-    if (buf && !muted) playCheerBuffer(audio, buf);
+  void loadCheer(audio).then((bufs) => {
+    if (bufs && !muted) startCheer(audio, bufs);
   });
 }
 

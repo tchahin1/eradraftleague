@@ -11,6 +11,7 @@ import {
   type PvpSquad,
   type ServerMessage,
 } from "../lib/pvp";
+import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, readKit } from "../lib/kits";
 import { simulateMatch } from "../lib/simulate";
 import type { FormationId } from "../lib/types";
 
@@ -50,7 +51,7 @@ function publicRoom(room: RoomRecord): PvpRoomPublic {
     hostId: room.hostId,
     phase: room.phase,
     match: room.match,
-    players: room.seats.map((seat) => ({
+    players: room.seats.map((seat, index) => ({
       id: seat.id,
       teamName: seat.teamName,
       formationId: seat.formationId,
@@ -58,6 +59,7 @@ function publicRoom(room: RoomRecord): PvpRoomPublic {
       ready: seat.ready,
       connected: seat.connected,
       rematch: seat.rematch,
+      kit: readKit(seat.kit, index === 0 ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT),
     })),
   };
 }
@@ -81,6 +83,13 @@ export class MatchRoom extends Server {
     const saved = await this.ctx.storage.get<RoomRecord>("room");
     this.room = saved ?? emptyRoom(this.name.toUpperCase());
     this.room.code = this.name.toUpperCase();
+    this.room.seats.forEach((seat, index) => {
+      seat.kit = readKit(seat.kit, index === 0 ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT);
+    });
+    if (this.room.match) {
+      this.room.match.homeKit = readKit(this.room.match.homeKit, DEFAULT_HOME_KIT);
+      this.room.match.awayKit = readKit(this.room.match.awayKit, DEFAULT_AWAY_KIT);
+    }
   }
 
   async persist() {
@@ -129,6 +138,7 @@ export class MatchRoom extends Server {
         ready: false,
         connected: true,
         rematch: false,
+        kit: this.room.seats.length === 0 ? { ...DEFAULT_HOME_KIT } : { ...DEFAULT_AWAY_KIT },
         squad: null,
       };
       this.room.seats.push(seat);
@@ -194,6 +204,13 @@ export class MatchRoom extends Server {
         await this.saveAndBroadcast();
         return;
       }
+      case "set-kit": {
+        if (this.room.phase === "match") return;
+        const fallback = this.room.seats[0]?.id === seat.id ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT;
+        seat.kit = readKit(message.kit, fallback);
+        await this.saveAndBroadcast();
+        return;
+      }
       case "progress": {
         if (this.room.phase === "match" || seat.ready) return;
         seat.filled = Math.max(0, Math.min(18, Math.round(message.filled)));
@@ -253,6 +270,8 @@ export class MatchRoom extends Server {
       scorers: score.scorers,
       homeSquad: home.squad,
       awaySquad: away.squad,
+      homeKit: readKit(home.kit, DEFAULT_HOME_KIT),
+      awayKit: readKit(away.kit, DEFAULT_AWAY_KIT),
     };
     this.room.phase = "match";
   }

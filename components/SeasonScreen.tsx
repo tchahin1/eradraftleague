@@ -60,6 +60,56 @@ function ordinal(n: number): string {
   }
 }
 
+function xiRecordFromSide(side: MatchSide): Record<string, PlayerSeason | null> {
+  const formation = FORMATION_BY_ID[side.formationId];
+  return Object.fromEntries(formation.slots.map((slot, index) => [slot.id, side.xi[index] ?? null]));
+}
+
+function benchForSide(
+  league: LeagueState,
+  teamId: string,
+  playerBench?: (PlayerSeason | null)[],
+): PlayerSeason[] {
+  if (teamId === PLAYER_TEAM_ID) {
+    return (playerBench ?? []).filter((player): player is PlayerSeason => Boolean(player));
+  }
+  return league.teams.find((team) => team.id === teamId)?.bench ?? [];
+}
+
+function MatchLineup({
+  side,
+  bench,
+  you,
+}: {
+  side: MatchSide;
+  bench: PlayerSeason[];
+  you: boolean;
+}) {
+  const formation = FORMATION_BY_ID[side.formationId];
+  return (
+    <div className="rounded-3xl border border-white/10 bg-emerald-950/40 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-300">
+        {you ? "Your XI" : "Their XI"} · {formation.name}
+      </p>
+      <h2 className="mt-1 text-2xl font-black text-white">{side.name}</h2>
+      <div className="mt-3 max-w-sm">
+        <Pitch formationId={side.formationId} xi={xiRecordFromSide(side)} interactive={false} />
+      </div>
+      {bench.length > 0 ? (
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {bench.map((player) => (
+            <div key={player.id} className="flex items-center gap-2 rounded-xl border border-white/10 px-2 py-1.5">
+              <PlayerPortrait player={player} size="sm" />
+              <span className="min-w-0 flex-1 truncate text-xs text-white">{player.name}</span>
+              <OverallBadge overall={player.overall} size="sm" />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function matchSide(
   league: LeagueState,
   teamId: string,
@@ -608,6 +658,20 @@ export function SeasonScreen({
               onClock={setClock}
               onComplete={onWatchComplete}
             />
+          ) : null}
+          {watchHome && watchAway && !watching.done ? (
+            <div className="mt-8 grid gap-4 lg:grid-cols-2">
+              <MatchLineup
+                side={watchHome}
+                bench={benchForSide(league, watchHome.id, bench)}
+                you={watchHome.id === PLAYER_TEAM_ID}
+              />
+              <MatchLineup
+                side={watchAway}
+                bench={benchForSide(league, watchAway.id, bench)}
+                you={watchAway.id === PLAYER_TEAM_ID}
+              />
+            </div>
           ) : null}
           {watching.done && nextFixture && formationId && xi && bench && onLineupChange ? (
             <div className="mt-8 border-t border-white/10 pt-6">

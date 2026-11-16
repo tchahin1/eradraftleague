@@ -1,4 +1,5 @@
 import { FORMATION_BY_ID, groupFromSlot, positionPenalty } from "./formations";
+import type { KitChoice } from "./kits";
 import { pitchSurname } from "./photos";
 import { autoSelectXi } from "./simulate";
 import type { FormationId, GoalScorer, PlayerSeason, SlotKind } from "./types";
@@ -10,6 +11,7 @@ export type MatchSide = {
   name: string;
   formationId: FormationId;
   xi: PlayerSeason[];
+  kit?: KitChoice;
 };
 
 export function kitLabel(name: string): string {
@@ -65,10 +67,15 @@ export type MatchEvent = {
   walkIn?: boolean;
   card?: MatchCard;
   cardName?: string;
+  contest?: MatchTouch;
 };
 
 export type Playhead = {
   phase: "hold" | "pass" | "shot" | "rest";
+  index: number;
+  touchIndex: number;
+  receiverIndex: number;
+  span: number;
   localT: number;
   holderName?: string;
   holderSlot?: SlotKind;
@@ -92,15 +99,20 @@ const SAVE_MS = 800;
 const GOAL_MS = 1400;
 const RESTART_MS = 2000;
 const TURNOVER_MS = 1600;
-const FOUL_MS = 1100;
+const FOUL_MS = 1400;
 const FREEKICK_MS = 2200;
 const CORNER_MS = 2400;
 const KICKOFF_MS = 1600;
+const BUILD_MS = 3000;
 const HT_MS = 1800;
 const FT_MS = 700;
 const TAPE_CAP_MS = 60_000;
 
-const WIDE_SLOTS: SlotKind[] = ["LW", "RW", "LB", "RB", "LWB", "RWB", "LM", "RM"];
+const STAY_BACK: SlotKind[] = ["CB", "LB", "RB"];
+
+export function isStayBack(slot: SlotKind) {
+  return STAY_BACK.includes(slot);
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -108,6 +120,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function point(x: number, y: number): PitchPoint {
   return { x: clamp(x, 4, 96), y: clamp(y, 6, 94) };
+}
+
+function ballPoint(x: number, y: number): PitchPoint {
+  return { x: clamp(x, 0.6, 99.4), y: clamp(y, 0.6, 99.4) };
 }
 
 function hashSeed(input: string): number {
@@ -240,20 +256,6 @@ function attackers(dots: MatchDot[], team: "home" | "away") {
   return forwards.length ? forwards : side;
 }
 
-function defenders(dots: MatchDot[], team: "home" | "away") {
-  const side = dots.filter((dot) => dot.team === team && !dot.isGk);
-  const back = side.filter(
-    (dot) =>
-      dot.slot === "CB" ||
-      dot.slot === "LB" ||
-      dot.slot === "RB" ||
-      dot.slot === "LWB" ||
-      dot.slot === "RWB" ||
-      dot.slot === "CDM",
-  );
-  return back.length ? back : side;
-}
-
 function mids(dots: MatchDot[], team: "home" | "away") {
   const side = dots.filter((dot) => dot.team === team && !dot.isGk);
   const midfield = side.filter(
@@ -337,22 +339,52 @@ function moveSpots(
   });
 }
 
-function shotTarget(team: "home" | "away", rng: () => number, scored: boolean, secondHalf: boolean): PitchPoint {
+type ShotMiss = "save" | "wide" | "corner";
+
+function shotTarget(
+  team: "home" | "away",
+  rng: () => number,
+  scored: boolean,
+  secondHalf: boolean,
+  miss: ShotMiss = "save",
+): PitchPoint {
   const dir = attackDir(team, secondHalf);
-  const goalX = dir > 0 ? 97.2 : 2.8;
-  const targetY = 50 + (rng() - 0.5) * 12;
-  if (scored) return point(goalX, targetY);
-  if (rng() < 0.45) return point(goalX + dir * 1.4, targetY + (rng() < 0.5 ? 16 : -16));
+  const goalX = dir > 0 ? 97.4 : 2.6;
+  const targetY = 50 + (rng() - 0.5) * 10;
+  if (scored) return ballPoint(goalX, targetY < 50 ? 46.2 - (targetY - 45) * 0.66 : 53.8 + (targetY - 50) * 0.66);
+  if (miss === "corner") {
+    return ballPoint(dir > 0 ? 99 : 1, rng() < 0.5 ? 1.4 : 98.6);
+  }
+  if (miss === "wide") {
+    return ballPoint(dir > 0 ? 99 : 1, targetY + (rng() < 0.5 ? 18 : -18));
+  }
   return point(dir > 0 ? 91 : 9, targetY);
 }
 
+/** Better keepers turn more of the chances that are not goals into saves. */
+function pickMiss(rng: () => number, keeperOverall: number): ShotMiss {
+  const saveShare = clamp(0.44 + (keeperOverall - 75) * 0.016, 0.3, 0.72);
+  const roll = rng();
+  if (roll < saveShare) return "save";
+  if (roll < saveShare + (1 - saveShare) * 0.55) return "wide";
+  return "corner";
+}
+
 function kickoffTouches(dots: MatchDot[], team: "home" | "away", secondHalf = false): MatchTouch[] {
-  const kicker = mids(dots, team)[0] ?? attackers(dots, team)[0];
+  const side = dots.filter((dot) => dot.team === team && !dot.isGk);
+  const kicker =
+    side.find((dot) => dot.slot === "ST") ??
+    side.find((dot) => dot.slot === "CAM") ??
+    attackers(dots, team)[0] ??
+    side[0];
   const mate =
-    mids(dots, team).find((dot) => dot.id !== kicker?.id) ??
-    attackers(dots, team).find((dot) => dot.id !== kicker?.id) ??
+    mids(dots, team)
+      .filter((dot) => dot.id !== kicker?.id)
+      .sort((a, b) => Math.abs(a.base.y - 50) - Math.abs(b.base.y - 50))[0] ??
+    side.find((dot) => dot.id !== kicker?.id) ??
     kicker;
   const dir = attackDir(team, secondHalf);
+  const mateY = mate && mate.base.y < 50 ? 42 : 58;
   return [
     {
       name: kicker?.name ?? "XI",
@@ -363,7 +395,7 @@ function kickoffTouches(dots: MatchDot[], team: "home" | "away", secondHalf = fa
     {
       name: mate?.name ?? kicker?.name ?? "XI",
       slot: mate?.slot ?? kicker?.slot,
-      at: point(50 + dir * 11, 42),
+      at: point(50 - dir * 12, mateY),
       lofted: false,
     },
   ];
@@ -455,10 +487,22 @@ export function passBall(from: PitchPoint, to: PitchPoint, t: number, loft = 0):
   };
 }
 
+/** Most shots are driven low; direct free kicks clear the wall and the odd effort is chipped. */
+function shotLoft(event: MatchEvent) {
+  if (event.walkIn || event.type === "corner") return 0;
+  if (event.type === "freekick") return 1.1;
+  return hashSeed(event.id) % 100 < 14 ? 0.9 : 0;
+}
+
 export function playhead(event: MatchEvent, t: number): Playhead {
   const origin = event.ball[0] ?? { x: 50, y: 50 };
+  const shotArc = shotLoft(event);
   const rest: Playhead = {
     phase: "rest",
+    index: -1,
+    touchIndex: -1,
+    receiverIndex: -1,
+    span: 1,
     localT: t,
     from: origin,
     to: origin,
@@ -495,20 +539,22 @@ export function playhead(event: MatchEvent, t: number): Playhead {
     }
   }
   if (event.type === "chance") {
-    phases.push({ kind: "shot", from: touches.length - 1, to: touches.length - 1, weight: event.walkIn ? 0.7 : 1.7 });
+    const weight = event.walkIn ? 0.7 : shotArc > 0 ? 1.5 : 1.05;
+    phases.push({ kind: "shot", from: touches.length - 1, to: touches.length - 1, weight });
   }
   if (event.type === "freekick" || event.type === "corner") {
     const finish = event.ball[event.ball.length - 1];
     const last = touches[touches.length - 1]?.at;
     if (finish && last && Math.hypot(finish.x - last.x, finish.y - last.y) > 8) {
-      phases.push({ kind: "shot", from: touches.length - 1, to: touches.length - 1, weight: 1.35 });
+      phases.push({ kind: "shot", from: touches.length - 1, to: touches.length - 1, weight: shotArc > 0 ? 1.35 : 1 });
     }
   }
 
   const total = phases.reduce((sum, phase) => sum + phase.weight, 0);
   let acc = 0;
   const clamped = clamp(t, 0, 0.999);
-  for (const phase of phases) {
+  for (let index = 0; index < phases.length; index += 1) {
+    const phase = phases[index]!;
     const start = acc / total;
     acc += phase.weight;
     const end = acc / total;
@@ -538,6 +584,10 @@ export function playhead(event: MatchEvent, t: number): Playhead {
                     : `${holderShort} on the ball`;
     return {
       phase: phase.kind,
+      index,
+      touchIndex: phase.from,
+      receiverIndex: phase.kind === "pass" ? phase.to : -1,
+      span: end - start,
       localT: local,
       holderName: holder.name,
       holderSlot: holder.slot,
@@ -546,17 +596,12 @@ export function playhead(event: MatchEvent, t: number): Playhead {
       from,
       to,
       caption,
-      loft:
-        phase.kind === "shot"
-          ? event.walkIn
-            ? 0.25
-            : 1.85
-          : holder.lofted
-            ? 1.55
-            : 0,
+      loft: phase.kind === "shot" ? shotArc : holder.lofted ? 1.55 : 0,
       air:
-        phase.kind === "shot" && !event.walkIn
-          ? Math.sin(local * Math.PI) * 0.55
+        phase.kind === "shot"
+          ? shotArc > 0
+            ? Math.sin(local * Math.PI) * 0.5
+            : 0
           : phase.kind === "pass" && holder.lofted
             ? Math.sin(local * Math.PI) * 0.55
             : 0,
@@ -565,80 +610,39 @@ export function playhead(event: MatchEvent, t: number): Playhead {
   return rest;
 }
 
-export function roleTarget(
+/** Where a player wants to be in open play: the whole team slides with the ball as one block. */
+export function teamShape(
   dot: MatchDot,
-  focus: PitchPoint,
-  carrier: PitchPoint,
-  tangent: PitchPoint,
+  ball: PitchPoint,
   possessing: boolean,
-  pressing: boolean,
-  supportSide: number | null,
-  eventType: MatchEventType,
-  secondHalf = false,
+  secondHalf: boolean,
 ): PitchPoint {
   const base = sideBase(dot, secondHalf);
   const dir = attackDir(dot.team, secondHalf);
-  const ownGoalX = dir > 0 ? 8 : 92;
-  if (eventType === "ht" || eventType === "ft" || eventType === "kickoff" || eventType === "restart") {
-    return { ...base };
-  }
-  if (eventType === "foul") {
-    return point(mix(base.x, focus.x, 0.22), mix(base.y, focus.y, 0.18));
-  }
-  if (eventType === "freekick" || eventType === "corner") {
-    if (dot.isGk) return point(mix(base.x, ownGoalX, 0.15), mix(base.y, focus.y, 0.18));
-    if (!possessing) {
-      const wallX = mix(focus.x, ownGoalX, 0.16);
-      return point(wallX, mix(focus.y, base.y, 0.28));
-    }
-    const box = dir > 0 ? 78 : 22;
-    return point(mix(base.x, box, 0.45), mix(base.y, focus.y, 0.22));
-  }
-  if (eventType === "goal") {
-    const box = dir > 0 ? 78 : 22;
-    return point(mix(base.x, mix(focus.x, box, 0.55), 0.34), mix(base.y, focus.y, 0.28));
-  }
-  if (eventType === "turnover") {
-    const drop = possessing ? 0.18 : 0.08;
-    if (dot.isGk) return point(mix(base.x, ownGoalX, 0.2), mix(base.y, focus.y, 0.2));
-    if (pressing) return point(mix(focus.x, ownGoalX, 0.08), mix(focus.y, base.y, 0.1));
-    return point(mix(base.x, focus.x, drop), mix(base.y, focus.y, 0.16));
-  }
-
+  const own = dir > 0 ? 0 : 100;
+  const ballDepth = (ball.x - own) * dir;
   if (dot.isGk) {
-    const rush = !possessing && (eventType === "chance" || eventType === "save") ? 0.28 : 0.07;
-    return point(mix(base.x, focus.x, rush), mix(base.y, focus.y, 0.32));
+    // Stand off the line on the ball-to-goal-centre line, staying within the middle of the goal.
+    const line = own + dir * 4;
+    const dx = ball.x - line;
+    const dy = (ball.y - 50) * 0.5;
+    const d = Math.hypot(dx, dy) || 1;
+    const reach = clamp(4.5 + (d - 15) * 0.07, 4.5, 10);
+    return {
+      x: line + dir * Math.max(3.5, Math.abs(dx / d) * reach),
+      y: clamp(50 + ((dy / d) * reach) / 0.5, 45.5, 54.5),
+    };
   }
-
-  if (pressing) {
-    return point(mix(focus.x, ownGoalX, 0.12), mix(focus.y, base.y, 0.12));
-  }
-
-  if (supportSide != null) {
-    return point(
-      carrier.x - tangent.x * 11 + -tangent.y * supportSide * 14,
-      carrier.y - tangent.y * 11 + tangent.x * supportSide * 18,
-    );
-  }
-
-  const shiftX = (focus.x - 50) * (possessing ? 0.36 : 0.22);
-  const shiftY = (focus.y - 50) * (possessing ? 0.2 : 0.14);
-  let x = base.x + shiftX;
-  let y = base.y + shiftY;
-  const wide = WIDE_SLOTS.includes(dot.slot);
-  const boxLimit = dir > 0 ? 82 : 18;
-
-  if (possessing) {
-    x += dir * 7;
-    if (wide) y = mix(y, base.y, 0.4);
-    if (dot.slot === "ST" || dot.slot === "CAM") x = mix(x, focus.x + dir * 12, 0.45);
-    if (dot.slot === "LW" || dot.slot === "RW") x = mix(x, focus.x + dir * 8, 0.3);
-    x = dir > 0 ? Math.min(x, boxLimit) : Math.max(x, boxLimit);
-  } else {
-    x = mix(x, ownGoalX, 0.14);
-    if (dot.slot === "CB" || dot.slot === "LB" || dot.slot === "RB") y = mix(y, base.y, 0.35);
-  }
-  return point(x, y);
+  const rank = ((base.x - own) * dir - 26) / 60;
+  const line = possessing ? clamp(ballDepth - 30, 20, 48) : clamp(ballDepth - 22, 12, 40);
+  const length = possessing ? 50 : 36;
+  const width = possessing ? 1.06 : 0.84;
+  const pull = possessing ? 0.12 : 0.3;
+  const depth = Math.min(line + rank * length, possessing ? 88 : 72);
+  return {
+    x: clamp(own + dir * depth, 4, 96),
+    y: clamp(50 + (base.y - 50) * width + (ball.y - 50) * pull, 6, 94),
+  };
 }
 
 function eventPoint(event: MatchEvent, end: boolean): PitchPoint {
@@ -659,6 +663,7 @@ function isOpenPlay(type: MatchEventType) {
     type === "save" ||
     type === "kickoff" ||
     type === "restart" ||
+    type === "turnover" ||
     type === "freekick" ||
     type === "corner"
   );
@@ -673,17 +678,94 @@ function needsTurnover(prev: MatchEvent, next: MatchEvent) {
   return true;
 }
 
-function closestDot(dots: MatchDot[], at: PitchPoint, secondHalf = false): MatchDot | undefined {
-  return dots.slice().sort((a, b) => {
-    const aPos = sideBase(a, secondHalf);
-    const bPos = sideBase(b, secondHalf);
-    return Math.hypot(aPos.x - at.x, aPos.y - at.y) - Math.hypot(bPos.x - at.x, bPos.y - at.y);
-  })[0];
+function inField(at: PitchPoint) {
+  return at.x > 4 && at.x < 96 && at.y > 4 && at.y < 96;
+}
+
+function endsWithHolder(event: MatchEvent) {
+  if (!event.teamId || !event.touches.length) return false;
+  if (event.type === "freekick") return event.touches.length > 1;
+  return (
+    event.type === "play" ||
+    event.type === "turnover" ||
+    event.type === "kickoff" ||
+    event.type === "restart"
+  );
+}
+
+function canCarryInto(prev: MatchEvent, next: MatchEvent) {
+  return next.type === "play" && prev.teamId === next.teamId && endsWithHolder(prev) && next.touches.length > 0;
+}
+
+function prependHolder(prev: MatchEvent, next: MatchEvent) {
+  const last = prev.touches[prev.touches.length - 1];
+  if (!last) return;
+  next.touches = [{ name: last.name, slot: last.slot, at: { ...last.at }, lofted: false }, ...next.touches.slice(-2)];
+  if (next.ball.length > 1) next.ball[0] = { ...last.at };
+}
+
+function dedupeTouches(event: MatchEvent) {
+  const merged: MatchTouch[] = [];
+  for (const touch of event.touches) {
+    if (merged[merged.length - 1]?.name === touch.name) {
+      merged[merged.length - 1] = { ...touch };
+      continue;
+    }
+    merged.push(touch);
+  }
+  event.touches = merged;
+}
+
+function carryPossession(prev: MatchEvent, next: MatchEvent, team: "home" | "away") {
+  const last = prev.touches[prev.touches.length - 1];
+  if (!last) return;
+  const secondHalf = next.minute > 45;
+  const dir = attackDir(team, secondHalf);
+  const carried: MatchTouch = { name: last.name, slot: last.slot, at: { ...last.at }, lofted: false };
+  const seen = new Set([last.name]);
+  const touches: MatchTouch[] = [carried];
+  for (const touch of next.touches) {
+    if (seen.has(touch.name)) continue;
+    seen.add(touch.name);
+    touches.push(touch);
+  }
+  if (touches.length < 2 && next.touches[0]) touches.push(next.touches[0]);
+  for (let i = 1; i < touches.length; i += 1) {
+    const item = touches[i]!;
+    const t = i / Math.max(1, touches.length - 1);
+    const x = last.at.x + dir * (10 + t * 16);
+    const y = mix(last.at.y, item.at.y, 0.5);
+    const nextAt = point(x, y);
+    item.at = nextAt;
+    item.lofted = Math.hypot(nextAt.x - last.at.x, nextAt.y - last.at.y) > 30 ? item.lofted : false;
+  }
+  next.touches = touches;
+  if (next.ball.length) next.ball[0] = { ...last.at };
+}
+
+function rankByShape(dots: MatchDot[], at: PitchPoint, secondHalf: boolean, possessing: boolean): MatchDot[] {
+  const dist = (dot: MatchDot) => {
+    const spot = teamShape(dot, at, possessing, secondHalf);
+    return Math.hypot(spot.x - at.x, (spot.y - at.y) * 0.5);
+  };
+  return dots
+    .map((dot) => ({ dot, d: dist(dot) }))
+    .sort((a, b) => a.d - b.d)
+    .map((entry) => entry.dot);
+}
+
+function closestByShape(
+  dots: MatchDot[],
+  at: PitchPoint,
+  secondHalf: boolean,
+  possessing: boolean,
+): MatchDot | undefined {
+  return rankByShape(dots, at, secondHalf, possessing)[0];
 }
 
 function makeTurnover(
   prev: MatchEvent,
-  next: MatchEvent,
+  next: Pick<MatchEvent, "minute" | "teamId">,
   dots: MatchDot[],
   team: "home" | "away",
   rng: () => number,
@@ -693,22 +775,32 @@ function makeTurnover(
   const side = dots.filter((dot) => dot.team === team);
   const gk = side.find((dot) => dot.isGk);
   const outfield = side.filter((dot) => !dot.isGk);
-  const inBox = from.x < 20 || from.x > 80;
-  const gkPos = gk ? sideBase(gk, secondHalf) : from;
+  const dir = attackDir(team, secondHalf);
+  const ownGoalX = dir > 0 ? 4 : 96;
+  const nearGoal = Math.abs(from.x - ownGoalX) < 18 && Math.abs(from.y - 50) < 30;
   const winner =
-    (prev.type === "save" || inBox) && gk && Math.hypot(gkPos.x - from.x, gkPos.y - from.y) < 34
+    gk && (prev.type === "save" || nearGoal)
       ? gk
-      : closestDot(outfield, from, secondHalf) ?? outfield[0] ?? side[0]!;
-  const winnerPos = sideBase(winner, secondHalf);
+      : closestByShape(outfield, from, secondHalf, false) ?? outfield[0] ?? side[0]!;
+  const winnerPos = teamShape(winner, from, false, secondHalf);
+  const meet = winner.isGk
+    ? inField(from)
+      ? point(from.x, from.y)
+      : point(ownGoalX + dir * 6, from.y < 50 ? 42 : 58)
+    : point(mix(from.x, winnerPos.x, 0.15), mix(from.y, winnerPos.y, 0.15));
+  const options = outfield.filter((dot) => dot.id !== winner.id);
+  const outletGuess = { x: mix(meet.x, dir > 0 ? 34 : 66, winner.isGk ? 0.7 : 0.5), y: mix(meet.y, 50, 0.3) };
   const outlet =
-    closestDot(
-      outfield.filter((dot) => dot.id !== winner.id),
-      { x: mix(from.x, winnerPos.x, 0.4), y: mix(from.y, winnerPos.y, 0.4) },
+    closestByShape(
+      winner.isGk ? options.filter((dot) => dot.slot !== "CB") : options,
+      outletGuess,
       secondHalf,
-    ) ?? winner;
-  const meet = point(mix(from.x, winnerPos.x, 0.08), mix(from.y, winnerPos.y, 0.08));
-  const retreatX = attackDir(team, secondHalf) > 0 ? 28 : 72;
-  const outletAt = point(mix(meet.x, retreatX, 0.48), mix(meet.y, sideBase(outlet, secondHalf).y, 0.5));
+      true,
+    ) ??
+    closestByShape(options, outletGuess, secondHalf, true) ??
+    winner;
+  const outletShape = teamShape(outlet, outletGuess, true, secondHalf);
+  const outletAt = point(mix(outletGuess.x, outletShape.x, 0.5), mix(outletGuess.y, outletShape.y, 0.6));
   const verb =
     prev.type === "save"
       ? winner.isGk
@@ -717,7 +809,7 @@ function makeTurnover(
       : rng() < 0.55
         ? "wins it"
         : "intercepts";
-  const lofted = prev.type === "save";
+  const lofted = winner.isGk;
   return {
     minute: next.minute,
     type: "turnover",
@@ -749,11 +841,14 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
   };
 
   const teamOf = (teamId: string) => (teamId === home.id ? "home" : "away");
-  const dismissals: { name: string; minute: number }[] = [];
-  const liveDots = (minute: number) => {
-    const out = new Set(dismissals.filter((item) => minute > item.minute).map((item) => item.name));
-    if (!out.size) return dots;
-    const next = dots.filter((dot) => !out.has(dot.name));
+  const keeperAgainst = (attack: "home" | "away") => {
+    const xi = attack === "home" ? away.xi : home.xi;
+    return (xi.find((player) => player.slot === "GK") ?? xi.find((player) => player.group === "GK"))?.overall ?? 75;
+  };
+  const sentOff = new Set<string>();
+  const liveDots = () => {
+    if (!sentOff.size) return dots;
+    const next = dots.filter((dot) => !sentOff.has(dot.name));
     return next.length >= 16 ? next : dots;
   };
   const opening = kickoffTouches(dots, "home");
@@ -773,7 +868,7 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
   const addPlay = (minute: number, teamId: string) => {
     const team = teamOf(teamId);
     const secondHalf = minute > 45;
-    const cast = pickCast(liveDots(minute), team, rng, 3);
+    const cast = pickCast(liveDots(), team, rng, 3);
     const spots = moveSpots(team, cast, rng, false, secondHalf);
     const touches = touchesFor(cast, spots, rng);
     const lead = touches[0];
@@ -790,30 +885,77 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
     });
   };
 
+  const chanceTouches = (
+    onPitch: MatchDot[],
+    team: "home" | "away",
+    actor: MatchDot | undefined,
+    scored: boolean,
+    walkIn: boolean,
+    secondHalf: boolean,
+  ): MatchTouch[] => {
+    const dir = attackDir(team, secondHalf);
+    const finisher = actor ?? rngPick(rng, attackers(onPitch, team));
+    if (!finisher) return [];
+    const finishY = mix(sideBase(finisher, secondHalf).y, 50, 0.4 + rng() * 0.2);
+    if (walkIn) {
+      return [
+        {
+          name: finisher.name,
+          slot: finisher.slot,
+          at: point(50 + dir * 36, finishY),
+          lofted: false,
+        },
+      ];
+    }
+    const supportPool = uniqueDots([...mids(onPitch, team), ...attackers(onPitch, team)]).filter(
+      (dot) => dot.id !== finisher.id,
+    );
+    const supplier = supportPool.length ? rngPick(rng, supportPool) : finisher;
+    const supplyX = 50 + dir * (scored ? 24 : 20);
+    const shotX = 50 + dir * (scored ? 34 : 28);
+    const supplyY = mix(sideBase(supplier, secondHalf).y, finishY, 0.35);
+    if (scored || rng() < 0.7) {
+      return [
+        { name: supplier.name, slot: supplier.slot, at: point(supplyX, supplyY), lofted: false },
+        { name: finisher.name, slot: finisher.slot, at: point(shotX, finishY), lofted: false },
+      ];
+    }
+    const extra = pickCast(onPitch, team, rng, 2, finisher)[0] ?? supplier;
+    return [
+      {
+        name: extra.name,
+        slot: extra.slot,
+        at: point(50 + dir * 12, mix(sideBase(extra, secondHalf).y, 50, 0.3)),
+        lofted: false,
+      },
+      { name: supplier.name, slot: supplier.slot, at: point(supplyX, supplyY), lofted: false },
+      { name: finisher.name, slot: finisher.slot, at: point(shotX, finishY), lofted: false },
+    ];
+  };
+
   const addChance = (minute: number, teamId: string, scorer?: GoalScorer) => {
     const team = teamOf(teamId);
     const secondHalf = minute > 45;
-    const onPitch = liveDots(minute);
+    const onPitch = liveDots();
     const actor = scorer
       ? findActor(onPitch, team, scorer.name, scorer.slot)
       : rngPick(rng, attackers(onPitch, team));
     const scored = Boolean(scorer);
     const walkIn = scored && rng() < 0.1;
-    const cast = pickCast(onPitch, team, rng, 4, actor);
-    const spots = moveSpots(team, cast, rng, true, secondHalf, walkIn);
-    const touches = touchesFor(cast, spots, rng);
-    const finish = shotTarget(team, rng, scored, secondHalf);
-    addPlay(minute, teamId);
+    const touches = chanceTouches(onPitch, team, actor, scored, walkIn, secondHalf);
+    const lastAt = touches[touches.length - 1]?.at ?? point(50, 50);
+    const miss = scored ? "save" : pickMiss(rng, keeperAgainst(team));
+    const finish = shotTarget(team, rng, scored, secondHalf, miss);
     push({
       minute,
       type: "chance",
       teamId,
       actorName: scorer?.name ?? actor?.name,
       actorSlot: scorer?.slot ?? actor?.slot,
-      ball: [spots[spots.length - 1] ?? finish, finish],
+      ball: [lastAt, finish],
       touches,
       caption: `${lastName(scorer?.name ?? actor?.name ?? "Forward")} shoots`,
-      durationMs: CHANCE_MS,
+      durationMs: scored ? 2100 : CHANCE_MS,
       walkIn,
     });
     if (scored) {
@@ -823,7 +965,7 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
         teamId,
         actorName: scorer?.name,
         actorSlot: scorer?.slot,
-        ball: [spots[spots.length - 1] ?? finish, finish],
+        ball: [lastAt, finish],
         touches: [],
         caption: `GOAL ${scorer?.name ?? ""}`.trim(),
         durationMs: GOAL_MS,
@@ -846,8 +988,7 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
       }
       return;
     }
-    const saved = !scored && finish.x > 8 && finish.x < 92;
-    if (!saved && rng() < 0.7) {
+    if (miss === "corner") {
       addCorner(minute, teamId, finish);
       return;
     }
@@ -859,7 +1000,7 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
       actorSlot: scorer?.slot ?? actor?.slot,
       ball: [finish],
       touches: [],
-      caption: saved ? "Saved" : "Wide of the post",
+      caption: miss === "save" ? "Saved" : "Wide of the post",
       durationMs: SAVE_MS,
     });
   };
@@ -868,12 +1009,17 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
     const team = teamOf(teamId);
     const secondHalf = minute > 45;
     const dir = attackDir(team, secondHalf);
-    const flag = point(dir > 0 ? 96.2 : 3.8, missed.y < 50 ? 6.8 : 93.2);
-    const onPitch = liveDots(minute);
-    const taker = rngPick(rng, [...mids(onPitch, team), ...attackers(onPitch, team)]);
+    const flag = ballPoint(dir > 0 ? 95.6 : 4.4, missed.y < 50 ? 4.6 : 95.4);
+    const onPitch = liveDots();
+    const wide = [...mids(onPitch, team), ...attackers(onPitch, team).filter((dot) => dot.slot !== "ST")];
+    const nearFlag = rankByShape(wide, flag, secondHalf, true).slice(0, 2);
+    const taker = nearFlag.length
+      ? rngPick(rng, nearFlag)
+      : rngPick(rng, [...mids(onPitch, team), ...attackers(onPitch, team)]);
     const target = attackers(onPitch, team).find((dot) => dot.id !== taker.id) ?? taker;
     const box = point(50 + dir * 32, 38 + rng() * 24);
-    const finish = shotTarget(team, rng, false, secondHalf);
+    const headerMiss = pickMiss(rng, keeperAgainst(team)) === "save" ? "save" : "wide";
+    const finish = shotTarget(team, rng, false, secondHalf, headerMiss);
     push({
       minute,
       type: "corner",
@@ -882,7 +1028,7 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
       actorSlot: taker.slot,
       ball: [flag, box, finish],
       touches: [
-        { name: taker.name, slot: taker.slot, at: flag, lofted: true },
+        { name: taker.name, slot: taker.slot, at: { x: flag.x - dir * 1.2, y: flag.y < 50 ? 6 : 94 }, lofted: true },
         { name: target.name, slot: target.slot, at: box, lofted: false },
       ],
       caption: "Corner",
@@ -896,82 +1042,20 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
       actorSlot: target.slot,
       ball: [finish],
       touches: [],
-      caption: finish.x > 8 && finish.x < 92 ? "Saved" : "Over the bar",
+      caption: headerMiss === "save" ? "Saved" : "Over the bar",
       durationMs: SAVE_MS,
     });
   };
 
-  const addFoul = (minute: number, attackId: string) => {
-    const attack = teamOf(attackId);
-    const defend = attack === "home" ? "away" : "home";
-    const secondHalf = minute > 45;
-    const dir = attackDir(attack, secondHalf);
-    const onPitch = liveDots(minute);
-    const victim = rngPick(rng, [...mids(onPitch, attack), ...attackers(onPitch, attack)]);
-    const fouler = rngPick(rng, defenders(onPitch, defend));
-    const spot = point(50 + dir * (10 + rng() * 24), 22 + rng() * 56);
+  // Fouls are only scheduled here. Who fouls whom is decided while stitching,
+  // so the victim is always whoever has the ball at that moment.
+  type FoulPlan = { card?: MatchCard; directRoll: number; takerRoll: number };
+  const foulPlans = new Map<string, FoulPlan>();
+  const addFoul = (minute: number) => {
     const cardRoll = rng();
-    const priorYellow = events.some((event) => event.card === "yellow" && event.cardName === fouler.name);
-    const card: MatchCard | undefined = priorYellow ? "red" : cardRoll < 0.08 ? "red" : cardRoll < 0.5 ? "yellow" : undefined;
-    const caption = card === "red" ? `RED ${fouler.name}` : card === "yellow" ? `Yellow, ${lastName(fouler.name)}` : `Foul, ${lastName(fouler.name)}`;
-    push({
-      minute,
-      type: "foul",
-      teamId: attackId,
-      actorName: victim.name,
-      actorSlot: victim.slot,
-      ball: [spot],
-      touches: [{ name: victim.name, slot: victim.slot, at: spot, lofted: false }],
-      caption,
-      durationMs: FOUL_MS,
-      card,
-      cardName: fouler.name,
-    });
-    if (card === "red") dismissals.push({ name: fouler.name, minute });
-    const taker = rngPick(rng, mids(onPitch, attack).length ? mids(onPitch, attack) : attackers(onPitch, attack));
-    const close = dir > 0 ? spot.x > 70 : spot.x < 30;
-    const mate = attackers(onPitch, attack).find((dot) => dot.id !== taker.id) ?? taker;
-    const box = point(50 + dir * 30, mix(spot.y, 50, 0.35));
-    const finish = shotTarget(attack, rng, false, secondHalf);
-    if (close && rng() < 0.55) {
-      push({
-        minute,
-        type: "freekick",
-        teamId: attackId,
-        actorName: taker.name,
-        actorSlot: taker.slot,
-        ball: [spot, finish],
-        touches: [{ name: taker.name, slot: taker.slot, at: spot, lofted: true }],
-        caption: "Free kick",
-        durationMs: FREEKICK_MS,
-      });
-      push({
-        minute,
-        type: "save",
-        teamId: attackId,
-        actorName: taker.name,
-        actorSlot: taker.slot,
-        ball: [finish],
-        touches: [],
-        caption: finish.x > 8 && finish.x < 92 ? "Saved" : "Over the wall",
-        durationMs: SAVE_MS,
-      });
-      return;
-    }
-    push({
-      minute,
-      type: "freekick",
-      teamId: attackId,
-      actorName: taker.name,
-      actorSlot: taker.slot,
-      ball: [spot, box],
-      touches: [
-        { name: taker.name, slot: taker.slot, at: spot, lofted: true },
-        { name: mate.name, slot: mate.slot, at: box, lofted: false },
-      ],
-      caption: "Free kick",
-      durationMs: FREEKICK_MS,
-    });
+    const card: MatchCard | undefined = cardRoll < 0.06 ? "red" : cardRoll < 0.5 ? "yellow" : undefined;
+    push({ minute, type: "foul", teamId: null, ball: [], touches: [], caption: "Foul", durationMs: FOUL_MS, card });
+    foulPlans.set(`e${serial - 1}`, { card, directRoll: rng(), takerRoll: rng() });
   };
 
   const goals = [...scorers].sort((a, b) => a.minute - b.minute);
@@ -980,32 +1064,10 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
   const foulCount = rng() < 0.45 ? 2 : 1;
   for (let i = 0; i < foulCount; i += 1) {
     const firstHalf = i === 0 ? rng() < 0.55 : rng() < 0.35;
-    const minute = uniqueMinute(rng, firstHalf ? 8 : 52, firstHalf ? 40 : 84, used);
-    const teamId = rng() < 0.5 ? home.id : away.id;
-    addFoul(minute, teamId);
+    addFoul(uniqueMinute(rng, firstHalf ? 8 : 52, firstHalf ? 40 : 84, used));
   }
-  if (!events.some((event) => event.card)) {
-    const foul = events.find((event) => event.type === "foul");
-    if (foul?.cardName) {
-      foul.card = "yellow";
-      foul.caption = `Yellow, ${lastName(foul.cardName)}`;
-    }
-  }
-  for (const event of events) {
-    if (event.type !== "foul" || !event.cardName || event.card === "red") continue;
-    const booked = events.some(
-      (item) =>
-        item.type === "foul" &&
-        item.cardName === event.cardName &&
-        item.card === "yellow" &&
-        item.minute < event.minute,
-    );
-    if (booked) {
-      event.card = "red";
-      event.caption = `RED ${event.cardName}`;
-      dismissals.push({ name: event.cardName, minute: event.minute });
-    }
-  }
+  const plans = [...foulPlans.values()];
+  if (plans[0] && !plans.some((plan) => plan.card)) plans[0].card = "yellow";
 
   for (const goal of goals) {
     addChance(goal.minute, goal.teamId, goal);
@@ -1019,14 +1081,6 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
     const teamId = rng() < clamp(homeBias, 0.35, 0.7) ? home.id : away.id;
     addChance(minute, teamId);
   }
-  if (!events.some((event) => event.type === "corner")) {
-    const firstHalf = rng() < 0.5;
-    const minute = uniqueMinute(rng, firstHalf ? 12 : 55, firstHalf ? 41 : 82, used);
-    const teamId = rng() < 0.5 ? home.id : away.id;
-    const dir = attackDir(teamOf(teamId), minute > 45);
-    addCorner(minute, teamId, point(dir > 0 ? 97 : 3, rng() < 0.5 ? 8 : 92));
-  }
-
   const fillers = 3 + (goals.length === 0 ? 1 : 0);
   for (let i = 0; i < fillers; i += 1) {
     const firstHalf = i < Math.ceil(fillers / 2);
@@ -1081,16 +1135,255 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
     ft: 10,
   };
   events.sort((a, b) => a.minute - b.minute || rank[a.type] - rank[b.type]);
+
+  const otherTeamId = (teamId: string) => (teamId === home.id ? away.id : home.id);
+  const booked = new Set<string>();
   const stitched: MatchEvent[] = [];
-  for (const event of events) {
+  const stamp = (event: Omit<MatchEvent, "id">): MatchEvent => {
+    const made = { ...event, id: `s${serial}` };
+    serial += 1;
+    return made;
+  };
+
+  const append = (event: MatchEvent) => {
     const prev = stitched[stitched.length - 1];
     if (prev && needsTurnover(prev, event)) {
-      const team = teamOf(event.teamId ?? "");
-      stitched.push({ ...makeTurnover(prev, event, dots, team, rng), id: `to${serial}` });
-      serial += 1;
+      stitched.push(stamp(makeTurnover(prev, event, liveDots(), teamOf(event.teamId ?? ""), rng)));
+    }
+    const last = stitched[stitched.length - 1];
+    if (last && canCarryInto(last, event)) {
+      carryPossession(last, event, teamOf(event.teamId ?? ""));
+    } else if (last && event.type === "chance" && last.teamId === event.teamId && endsWithHolder(last)) {
+      prependHolder(last, event);
     }
     stitched.push(event);
+  };
+
+  // After a save or a shot off target the ball belongs to the defending side.
+  const keeperBall = (save: MatchEvent, minute: number) => {
+    if (!save.teamId) return;
+    const defendId = otherTeamId(save.teamId);
+    stitched.push(stamp(makeTurnover(save, { minute, teamId: defendId }, liveDots(), teamOf(defendId), rng)));
+  };
+
+  // The side that kicks off keeps the ball for a short spell of passing.
+  const buildUp = (kick: MatchEvent, minute: number) => {
+    const mate = kick.touches[kick.touches.length - 1];
+    if (!kick.teamId || !mate) return;
+    const team = teamOf(kick.teamId);
+    const dir = attackDir(team, kick.minute > 45);
+    const own = dir > 0 ? 0 : 100;
+    const side = liveDots().filter((dot) => dot.team === team && !dot.isGk && dot.name !== mate.name);
+    const nearY = (y: number) => (a: MatchDot, b: MatchDot) => Math.abs(a.base.y - y) - Math.abs(b.base.y - y);
+    const back = side
+      .filter((dot) => isStayBack(dot.slot) || dot.slot === "LWB" || dot.slot === "RWB")
+      .sort(nearY(mate.at.y))[0];
+    const mid = mids(side, team)
+      .filter((dot) => dot.id !== back?.id)
+      .sort(nearY(100 - mate.at.y))[0];
+    const runner = attackers(side, team)
+      .filter((dot) => dot.id !== mid?.id && dot.id !== back?.id)
+      .sort(nearY(mid?.base.y ?? 50))[0];
+    const depths = [24, 44, 60];
+    const cast = [back, mid, runner].filter((dot): dot is MatchDot => Boolean(dot));
+    const touches: MatchTouch[] = [
+      { name: mate.name, slot: mate.slot, at: { ...mate.at }, lofted: false },
+      ...cast.map((dot, i) => ({
+        name: dot.name,
+        slot: dot.slot,
+        at: point(own + dir * (depths[i] ?? 50), mix(dot.base.y, 50, 0.15)),
+        lofted: false,
+      })),
+    ];
+    stitched.push(
+      stamp({
+        minute,
+        type: "play",
+        teamId: kick.teamId,
+        actorName: mate.name,
+        actorSlot: mate.slot,
+        ball: touches.map((touch) => touch.at),
+        touches,
+        caption: "Build-up",
+        durationMs: BUILD_MS,
+      }),
+    );
+  };
+
+  const namesAfter = (index: number) => {
+    const names = new Set<string>();
+    for (const event of events.slice(index + 1)) {
+      if (event.actorName) names.add(event.actorName);
+      for (const touch of event.touches) names.add(touch.name);
+    }
+    return names;
+  };
+
+  type PendingFoul = { plan: FoulPlan; minute: number; index: number };
+  let pending: PendingFoul | null = null;
+
+  const foulSequence = (foul: PendingFoul, prev: MatchEvent): MatchEvent[] | null => {
+    const holder = prev.touches[prev.touches.length - 1];
+    if (!holder || !prev.teamId) return null;
+    const attackId = prev.teamId;
+    const attack = teamOf(attackId);
+    const defend = attack === "home" ? "away" : "home";
+    const minute = Math.max(foul.minute, prev.minute);
+    const secondHalf = minute > 45;
+    const dir = attackDir(attack, secondHalf);
+    const own = dir > 0 ? 0 : 100;
+    const spot = point(holder.at.x, holder.at.y);
+    const depth = (spot.x - own) * dir;
+    // Inside the box this would be a penalty, which the tape does not stage.
+    if (depth > 79 && Math.abs(spot.y - 50) < 29) return null;
+    const onPitch = liveDots();
+    const ranked = onPitch
+      .filter((dot) => dot.team === defend && !dot.isGk && dot.slot !== "ST" && dot.slot !== "LW" && dot.slot !== "RW")
+      .map((dot) => {
+        const at = teamShape(dot, spot, false, secondHalf);
+        return { dot, d: Math.hypot(at.x - spot.x, (at.y - spot.y) * 0.5) };
+      })
+      .sort((a, b) => a.d - b.d)
+      .map((item) => item.dot);
+    if (!ranked.length) return null;
+    const later = namesAfter(foul.index);
+    const sendsOff = (dot: MatchDot) =>
+      foul.plan.card === "red" || (foul.plan.card === "yellow" && booked.has(dot.name));
+    let card = foul.plan.card;
+    let fouler = ranked.slice(0, 2).find((dot) => !sendsOff(dot) || !later.has(dot.name));
+    if (!fouler) {
+      fouler = ranked[0]!;
+      card = booked.has(fouler.name) ? undefined : "yellow";
+    }
+    if (card === "yellow" && booked.has(fouler.name)) card = "red";
+    if (card === "red") sentOff.add(fouler.name);
+    if (card === "yellow") booked.add(fouler.name);
+    const foulerAt = teamShape(fouler, spot, false, secondHalf);
+    const challenge = point(spot.x - dir * 2.4, spot.y + (foulerAt.y >= spot.y ? 2 : -2));
+    const caption =
+      card === "red"
+        ? `RED ${fouler.name}`
+        : card === "yellow"
+          ? `Yellow, ${lastName(fouler.name)}`
+          : `Foul, ${lastName(fouler.name)}`;
+    const out: MatchEvent[] = [
+      stamp({
+        minute,
+        type: "foul",
+        teamId: attackId,
+        actorName: holder.name,
+        actorSlot: holder.slot,
+        ball: [spot],
+        touches: [{ name: holder.name, slot: holder.slot, at: spot, lofted: false }],
+        contest: { name: fouler.name, slot: fouler.slot, at: challenge, lofted: false },
+        caption,
+        durationMs: FOUL_MS,
+        card,
+        cardName: fouler.name,
+      }),
+    ];
+    const side = liveDots().filter((dot) => dot.team === attack && !dot.isGk);
+    const takers = rankByShape(
+      mids(side, attack).filter((dot) => dot.name !== holder.name),
+      spot,
+      secondHalf,
+      true,
+    ).slice(0, 2);
+    const taker = takers[Math.floor(foul.plan.takerRoll * takers.length)] ?? side[0]!;
+    const close = depth > 64 && Math.abs(spot.y - 50) < 34;
+    if (close && foul.plan.directRoll < 0.55) {
+      const finish = shotTarget(attack, rng, false, secondHalf, "save");
+      out.push(
+        stamp({
+          minute,
+          type: "freekick",
+          teamId: attackId,
+          actorName: taker.name,
+          actorSlot: taker.slot,
+          ball: [spot, finish],
+          touches: [{ name: taker.name, slot: taker.slot, at: spot, lofted: true }],
+          caption: "Free kick",
+          durationMs: FREEKICK_MS,
+        }),
+        stamp({
+          minute,
+          type: "save",
+          teamId: attackId,
+          actorName: taker.name,
+          actorSlot: taker.slot,
+          ball: [finish],
+          touches: [],
+          caption: "Saved",
+          durationMs: SAVE_MS,
+        }),
+      );
+      return out;
+    }
+    const mate = attackers(side, attack).find((dot) => dot.id !== taker.id) ?? taker;
+    const box = point(own + dir * clamp(depth + 22, 58, 84), mix(spot.y, 50, 0.4));
+    out.push(
+      stamp({
+        minute,
+        type: "freekick",
+        teamId: attackId,
+        actorName: taker.name,
+        actorSlot: taker.slot,
+        ball: [spot, box],
+        touches: [
+          { name: taker.name, slot: taker.slot, at: spot, lofted: true },
+          { name: mate.name, slot: mate.slot, at: box, lofted: false },
+        ],
+        caption: "Free kick",
+        durationMs: FREEKICK_MS,
+      }),
+    );
+    return out;
+  };
+
+  const tryFoul = () => {
+    if (!pending) return;
+    let prev = stitched[stitched.length - 1];
+    if (!prev) return;
+    if (prev.type === "save") {
+      keeperBall(prev, pending.minute);
+      prev = stitched[stitched.length - 1]!;
+    }
+    if (prev.type === "kickoff" || prev.type === "restart") {
+      buildUp(prev, pending.minute);
+      prev = stitched[stitched.length - 1]!;
+    }
+    if (!endsWithHolder(prev)) return;
+    const sequence = foulSequence(pending, prev);
+    if (!sequence) return;
+    pending = null;
+    stitched.push(...sequence);
+  };
+
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index]!;
+    if (event.type === "foul") {
+      const plan = foulPlans.get(event.id);
+      if (plan) pending = { plan, minute: event.minute, index };
+      tryFoul();
+      continue;
+    }
+    if (event.type === "ht" || event.type === "ft") pending = null;
+    const prev = stitched[stitched.length - 1];
+    if (prev?.type === "save" && prev.teamId === event.teamId && (event.type === "play" || event.type === "chance")) {
+      keeperBall(prev, event.minute);
+    }
+    const last = stitched[stitched.length - 1];
+    if (
+      last &&
+      (last.type === "kickoff" || last.type === "restart") &&
+      !(event.type === "play" && event.teamId === last.teamId)
+    ) {
+      buildUp(last, event.minute);
+    }
+    append(event);
+    tryFoul();
   }
+  for (const event of stitched) dedupeTouches(event);
   const total = stitched.reduce((sum, event) => sum + event.durationMs, 0);
   if (total > TAPE_CAP_MS) {
     const scale = TAPE_CAP_MS / total;

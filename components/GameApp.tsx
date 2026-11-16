@@ -40,6 +40,10 @@ import { HomeHero, LeaguePicker } from "./LeaguePicker";
 import { MatchPitch } from "./MatchPitch";
 import { PvpApp } from "./PvpApp";
 import { SeasonScreen } from "./SeasonScreen";
+import { VsAiApp } from "./VsAiApp";
+
+const MODE_BUTTON_CLASS =
+  "rounded-2xl border-2 border-transparent bg-amber-300 px-4 py-4 text-sm font-black uppercase tracking-widest text-emerald-950 transition duration-200 ease-out hover:-translate-y-1 hover:scale-[1.02] hover:border-white hover:bg-amber-200 hover:shadow-[0_0_0_3px_#fff,0_16px_40px_rgb(252_211_77_/_0.4)] disabled:cursor-not-allowed disabled:opacity-60 sm:px-6 sm:text-base";
 
 function BootScreen() {
   return (
@@ -58,6 +62,7 @@ export function GameApp() {
   const urlRoom = isRoomCode(roomParam) ? roomParam : null;
   const demoPitch = searchParams.get("demo") === "pitch";
   const [pvpMenu, setPvpMenu] = useState(false);
+  const [aiMenu, setAiMenu] = useState(false);
   const [homeView, setHomeView] = useState<"modes" | "single">("modes");
   const pvp = pvpMenu || Boolean(urlRoom);
   const [players, setPlayers] = useState<PlayerSeason[] | null>(null);
@@ -123,11 +128,11 @@ export function GameApp() {
   }, [demoPitch]);
 
   useEffect(() => {
-    if (!hydrated || pvp) return;
+    if (!hydrated || pvp || aiMenu) return;
     if (state.phase === "home") return;
     saveGame(state);
     setSavedMeta(peekSavedGame());
-  }, [state, hydrated, pvp]);
+  }, [state, hydrated, pvp, aiMenu]);
 
   useEffect(() => {
     if (!hydrated || state.phase !== "draft" || state.offer || !state.formationId) return;
@@ -296,6 +301,7 @@ export function GameApp() {
     setSelectedPlayer(null);
     setSavedMeta(null);
     setPvpMenu(false);
+    setAiMenu(false);
     setHomeView(view);
     setState({ ...emptyGame(), teamName: state.teamName || "Your XI" });
   };
@@ -308,8 +314,20 @@ export function GameApp() {
         initialRoom={urlRoom}
         onLeave={() => {
           setPvpMenu(false);
+          setAiMenu(false);
           setHomeView("modes");
           router.replace("/", { scroll: false });
+        }}
+      />
+    );
+  }
+
+  if (aiMenu) {
+    return (
+      <VsAiApp
+        onLeave={() => {
+          setAiMenu(false);
+          setHomeView("modes");
         }}
       />
     );
@@ -354,22 +372,30 @@ export function GameApp() {
         <HomeHero error={error} />
         {homeView === "modes" ? (
           <div className="flex flex-col gap-3">
-            <div className="grid w-full max-w-xl grid-cols-2 gap-3">
+            <div className="flex w-full max-w-xl flex-col gap-3">
               <button
                 type="button"
                 disabled={Boolean(loadingLeague)}
                 onClick={() => setHomeView("single")}
-                className="rounded-2xl bg-amber-300 px-4 py-4 text-sm font-black uppercase tracking-widest text-emerald-950 sm:px-6 sm:text-base"
+                className={MODE_BUTTON_CLASS}
               >
-                Single player mode
+                Single player league
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(loadingLeague)}
+                onClick={() => setAiMenu(true)}
+                className={MODE_BUTTON_CLASS}
+              >
+                Player vs AI
               </button>
               <button
                 type="button"
                 disabled={Boolean(loadingLeague)}
                 onClick={() => setPvpMenu(true)}
-                className="rounded-2xl bg-white/10 px-4 py-4 text-sm font-black uppercase tracking-widest text-white sm:px-6 sm:text-base"
+                className={MODE_BUTTON_CLASS}
               >
-                PvP mode
+                PvP
               </button>
             </div>
             {savedMeta ? (
@@ -377,7 +403,7 @@ export function GameApp() {
                 type="button"
                 disabled={Boolean(loadingLeague)}
                 onClick={continueSaved}
-                className="w-fit rounded-2xl bg-white/10 px-6 py-3 font-semibold text-white"
+                className="w-fit rounded-2xl border-2 border-transparent bg-white/10 px-6 py-3 font-semibold text-white transition hover:border-white/50 hover:bg-white/15"
               >
                 Continue {LEAGUE_BY_ID[savedMeta.leagueId].name}
               </button>

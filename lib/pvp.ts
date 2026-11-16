@@ -1,4 +1,5 @@
 import { BENCH_SIZE, FORMATION_BY_ID, playInSlot } from "./formations";
+import type { KitChoice } from "./kits";
 import { isLeagueId, type LeagueId } from "./leagues";
 import { squadStrength, type SimTeam } from "./simulate";
 import type { FormationId, GoalScorer, PlayerSeason } from "./types";
@@ -26,6 +27,7 @@ export type PvpPlayerPublic = {
   ready: boolean;
   connected: boolean;
   rematch: boolean;
+  kit: KitChoice;
 };
 
 export type PvpMatch = {
@@ -38,6 +40,8 @@ export type PvpMatch = {
   scorers: GoalScorer[];
   homeSquad: PvpSquad;
   awaySquad: PvpSquad;
+  homeKit: KitChoice;
+  awayKit: KitChoice;
 };
 
 export type PvpRoomPublic = {
@@ -53,6 +57,7 @@ export type ClientMessage =
   | { type: "hello"; teamName?: string; leagueId?: LeagueId }
   | { type: "set-league"; leagueId: LeagueId }
   | { type: "set-profile"; teamName: string; formationId?: FormationId | null }
+  | { type: "set-kit"; kit: KitChoice }
   | { type: "progress"; filled: number }
   | { type: "ready"; squad: PvpSquad }
   | { type: "unready" }

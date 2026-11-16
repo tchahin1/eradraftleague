@@ -194,3 +194,45 @@ button {
   --card-accent: #f6f0ff;
   --card-wash: #2e1848;
 }
+
+.kit-face {
+  background-color: var(--kit-a, #fcd34d);
+  color: var(--kit-ink, #064e3b);
+  text-shadow: 0 1px 1px rgb(0 0 0 / 0.25);
+}
+
+.kit-stripes {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--kit-a) 0px,
+    var(--kit-a) 5px,
+    var(--kit-b) 5px,
+    var(--kit-b) 9px
+  );
+}
+
+.kit-hoops {
+  background-image: repeating-linear-gradient(
+    180deg,
+    var(--kit-a) 0px,
+    var(--kit-a) 5px,
+    var(--kit-b) 5px,
+    var(--kit-b) 9px
+  );
+}
+
+.kit-sash {
+  background-image: linear-gradient(
+    125deg,
+    var(--kit-a) 0%,
+    var(--kit-a) 38%,
+    var(--kit-b) 38%,
+    var(--kit-b) 62%,
+    var(--kit-a) 62%,
+    var(--kit-a) 100%
+  );
+}
+
+.kit-halves {
+  background-image: linear-gradient(90deg, var(--kit-a) 50%, var(--kit-b) 50%);
+}

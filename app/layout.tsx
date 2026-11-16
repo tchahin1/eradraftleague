@@ -13,9 +13,41 @@ const sans = DM_Sans({
   variable: "--font-dm-sans",
 });
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : "http://localhost:3000");
+
+const description =
+  "Draft an XI from random club-seasons in Europe's top five leagues and win a fictional title race.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Era Draft League",
-  description: "Draft an XI from random club-seasons in Europe's top five leagues and win a fictional title race.",
+  description,
+  applicationName: "Era Draft League",
+  openGraph: {
+    title: "Era Draft League",
+    description,
+    type: "website",
+    siteName: "Era Draft League",
+    locale: "en_GB",
+    images: [
+      {
+        url: "/og.jpg",
+        width: 1024,
+        height: 558,
+        alt: "EDL Era Draft League",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Era Draft League",
+    description,
+    images: ["/og.jpg"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
