@@ -204,20 +204,15 @@ button {
 .kit-stripes {
   background-image: repeating-linear-gradient(
     90deg,
-    var(--kit-a) 0px,
-    var(--kit-a) 5px,
-    var(--kit-b) 5px,
-    var(--kit-b) 9px
+    var(--kit-a) 0% 28%,
+    var(--kit-b) 28% 56%
   );
 }
 
 .kit-hoops {
   background-image: repeating-linear-gradient(
-    180deg,
-    var(--kit-a) 0px,
-    var(--kit-a) 5px,
-    var(--kit-b) 5px,
-    var(--kit-b) 9px
+    var(--kit-a) 0% 28%,
+    var(--kit-b) 28% 56%
   );
 }
 

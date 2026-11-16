@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { autoDraftSquad, randomAiName } from "@/lib/ai-draft";
 import { applyDraftPlacement, indexClubSeasons, pickRandomOffer, playerCanBePicked } from "@/lib/draft";
 import { loadDataset } from "@/lib/data";
@@ -46,6 +46,7 @@ export function VsAiApp({ onLeave }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [teamName, setTeamName] = useState("Your XI");
   const [kit, setKit] = useState<KitChoice>(DEFAULT_HOME_KIT);
+  const kitRef = useRef(kit);
   const [formationId, setFormationId] = useState<FormationId | null>(null);
   const [xi, setXi] = useState<Record<string, PlayerSeason | null>>({});
   const [bench, setBench] = useState<(PlayerSeason | null)[]>([]);
@@ -60,6 +61,10 @@ export function VsAiApp({ onLeave }: Props) {
   const clubSeasons = useMemo(() => (players ? indexClubSeasons(players) : []), [players]);
   const loadingLeague = Boolean(leagueId && loadedLeagueId !== leagueId);
   const aiKit = kitAwayFrom(kit);
+  const chooseKit = (next: KitChoice) => {
+    kitRef.current = next;
+    setKit(next);
+  };
 
   useEffect(() => {
     document.documentElement.dataset.league = leagueId ?? hoveredLeague ?? STARTING_LEAGUE_ID;
@@ -172,6 +177,7 @@ export function VsAiApp({ onLeave }: Props) {
       setError("The AI could not build a squad. Try again.");
       return;
     }
+    const chosen: KitChoice = { ...kitRef.current };
     const score = simulateMatch(makePvpSimTeam(YOU_ID, youSquad), makePvpSimTeam(AI_ID, aiSquad));
     setError(null);
     setMatch({
@@ -184,8 +190,8 @@ export function VsAiApp({ onLeave }: Props) {
       scorers: score.scorers,
       homeSquad: youSquad,
       awaySquad: aiSquad,
-      homeKit: kit,
-      awayKit: aiKit,
+      homeKit: chosen,
+      awayKit: kitAwayFrom(chosen),
     });
     setPhase("match");
   };
@@ -262,7 +268,7 @@ export function VsAiApp({ onLeave }: Props) {
             </p>
           </div>
           <div className="mt-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
-            <KitPicker kit={kit} opponentKit={aiKit} onChange={setKit} />
+            <KitPicker kit={kit} opponentKit={aiKit} onChange={chooseKit} />
           </div>
           {error ? <p className="mt-3 text-sm text-rose-200">{error}</p> : null}
         </div>
@@ -305,7 +311,7 @@ export function VsAiApp({ onLeave }: Props) {
           </button>
         </div>
         <div className="mt-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
-          <KitPicker kit={kit} opponentKit={aiKit} onChange={setKit} />
+          <KitPicker kit={kit} opponentKit={aiKit} onChange={chooseKit} />
         </div>
         {error ? <p className="mt-3 text-sm text-rose-200">{error}</p> : null}
       </div>

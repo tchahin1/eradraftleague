@@ -1,3 +1,4 @@
+import type { KitChoice } from "./kits";
 import type {
   GoalScorer,
   LeagueState,
@@ -335,6 +336,7 @@ function toLeagueTeam(team: SimTeam, keepSquad: boolean): LeagueTeam {
     isPlayer: team.isPlayer,
     attack: team.attack,
     defense: team.defense,
+    kit: team.kit,
   };
   if (!keepSquad) return base;
   return { ...base, xi: team.xi, bench: team.bench };
@@ -432,6 +434,7 @@ export function makePlayerLeagueTeam(
   teamName: string,
   xi: PlayerSeason[],
   bench: PlayerSeason[],
+  kit?: KitChoice,
 ): SimTeam {
   const { attack, defense } = squadStrength(xi, bench);
   return {
@@ -442,6 +445,7 @@ export function makePlayerLeagueTeam(
     isPlayer: true,
     attack,
     defense,
+    kit,
     xi,
     bench,
   };

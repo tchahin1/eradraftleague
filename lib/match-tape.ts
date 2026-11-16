@@ -1,5 +1,5 @@
 import { FORMATION_BY_ID, groupFromSlot, positionPenalty } from "./formations";
-import { kitDistinctFrom, kitFromSeed, type KitChoice } from "./kits";
+import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, kitDistinctFrom, kitFromSeed, readKit, type KitChoice } from "./kits";
 import { pitchSurname } from "./photos";
 import { autoSelectXi } from "./simulate";
 import type { FormationId, GoalScorer, PlayerSeason, SlotKind } from "./types";
@@ -27,6 +27,7 @@ export type MatchDot = {
   slot: SlotKind;
   isGk: boolean;
   team: "home" | "away";
+  kit: KitChoice;
   base: PitchPoint;
 };
 
@@ -219,12 +220,13 @@ export function dotsFromSide(side: MatchSide, team: "home" | "away"): MatchDot[]
   return formation.slots.map((slot, index) => {
     const player = fitted[index];
     return {
-      id: player?.id ?? `${team}-${slot.id}`,
+      id: `${team}:${player?.id ?? slot.id}`,
       name: player?.name ?? slot.label,
       initials: kitLabel(player?.name ?? slot.label),
       slot: slot.kind,
       isGk: slot.kind === "GK",
       team,
+      kit: readKit(side.kit, team === "home" ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT),
       base: slotToPitch(slot, team),
     };
   });

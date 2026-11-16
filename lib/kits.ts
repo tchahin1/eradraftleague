@@ -114,10 +114,10 @@ export function kitPatternClass(choice: KitChoice | undefined): string {
 
 function kitImage(pattern: KitChoice["pattern"], primary: string, secondary: string): string {
   if (pattern === "stripes") {
-    return `repeating-linear-gradient(90deg, ${primary} 0px, ${primary} 5px, ${secondary} 5px, ${secondary} 9px)`;
+    return `repeating-linear-gradient(90deg, ${primary} 0% 28%, ${secondary} 28% 56%)`;
   }
   if (pattern === "hoops") {
-    return `repeating-linear-gradient(${primary} 0px, ${primary} 5px, ${secondary} 5px, ${secondary} 9px)`;
+    return `repeating-linear-gradient(${primary} 0% 28%, ${secondary} 28% 56%)`;
   }
   if (pattern === "sash") {
     return `linear-gradient(125deg, ${primary} 0% 38%, ${secondary} 38% 62%, ${primary} 62% 100%)`;

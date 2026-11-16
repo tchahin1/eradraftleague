@@ -59,7 +59,7 @@ export type ClientMessage =
   | { type: "set-profile"; teamName: string; formationId?: FormationId | null }
   | { type: "set-kit"; kit: KitChoice }
   | { type: "progress"; filled: number }
-  | { type: "ready"; squad: PvpSquad }
+  | { type: "ready"; squad: PvpSquad; kit?: KitChoice }
   | { type: "unready" }
   | { type: "rematch" };
 

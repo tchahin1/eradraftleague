@@ -11,7 +11,7 @@ import {
   stopMatchSfx,
   subscribeMatchSfxMuted,
 } from "@/lib/match-sfx";
-import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, kitPatternClass, kitStyle, kitVars } from "@/lib/kits";
+import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, kitPatternClass, kitStyle, kitVars, type KitChoice } from "@/lib/kits";
 import type { GoalScorer } from "@/lib/types";
 
 type Props = {
@@ -29,6 +29,10 @@ type Frame = {
   minute: number;
   done: boolean;
 };
+
+function kitKey(kit?: KitChoice) {
+  return kit ? `${kit.color}.${kit.secondary}.${kit.pattern}` : "";
+}
 
 function clockLabel(event: MatchEvent) {
   if (event.type === "ht") return "Half time";
@@ -60,6 +64,8 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
     away.formationId,
     home.xi.map((player) => player.id).join("|"),
     away.xi.map((player) => player.id).join("|"),
+    kitKey(home.kit),
+    kitKey(away.kit),
     scorers.map((goal) => `${goal.minute}:${goal.name}:${goal.slot}`).join("|"),
   ].join("::");
   const tape = useMemo(
@@ -86,6 +92,7 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
   const muted = useSyncExternalStore(subscribeMatchSfxMuted, isMatchSfxMuted, () => false);
   const soundOn = !muted;
   const sidesRef = useRef({ home: home.name, away: away.name, homeInk: "", awayInk: "" });
+  const kitsRef = useRef({ home: home.kit, away: away.kit });
 
   useEffect(() => {
     onRevealRef.current = onReveal;
@@ -100,6 +107,7 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
       homeInk: kitStyle(home.kit, DEFAULT_HOME_KIT).label,
       awayInk: kitStyle(away.kit, DEFAULT_AWAY_KIT).label,
     };
+    kitsRef.current = { home: home.kit, away: away.kit };
   }, [home.name, home.kit, away.name, away.kit]);
 
   useEffect(() => {
@@ -130,6 +138,13 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
         const booked = f.booked.has(dot.name) && !sentOff;
         const lifted = !sentOff && (dot.id === f.ownerId || dot.id === f.receiverId);
         const toLine = Math.min(at.y, 100 - at.y);
+        const shirt = kitVars(
+          dot.team === "home" ? (kitsRef.current.home ?? dot.kit) : (kitsRef.current.away ?? dot.kit),
+          dot.team === "home" ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT,
+        );
+        node.style.backgroundColor = shirt.backgroundColor;
+        node.style.backgroundImage = shirt.backgroundImage;
+        node.style.color = shirt.color;
         node.style.left = `${at.x}%`;
         node.style.top = `${at.y}%`;
         node.style.opacity = sentOff ? `${Math.min(0.45, Math.max(0, (toLine - 1) / 10))}` : "1";
@@ -273,7 +288,7 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
 
         {tape.dots.map((dot) => {
           const yours = (dot.team === "home" ? home.id : away.id) === youId;
-          const kit = dot.team === "home" ? home.kit : away.kit;
+          const kit = dot.team === "home" ? (home.kit ?? dot.kit) : (away.kit ?? dot.kit);
           const fallback = dot.team === "home" ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT;
           return (
             <div

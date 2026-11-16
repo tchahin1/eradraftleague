@@ -75,6 +75,7 @@ export type LeagueTeam = {
   isPlayer: boolean;
   attack: number;
   defense: number;
+  kit?: KitChoice;
   xi?: PlayerSeason[];
   bench?: PlayerSeason[];
 };

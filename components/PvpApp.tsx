@@ -475,7 +475,7 @@ function PvpSession({
           onReady: () => {
             const squad = serializeSquad(teamName, formationId, xi, bench);
             if (!squad) return;
-            send({ type: "ready", squad });
+            send({ type: "ready", squad, kit });
           },
           onUnready: () => send({ type: "unready" }),
         }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loadDataset } from "@/lib/data";
 import {
@@ -32,6 +32,7 @@ import {
   startSeason,
 } from "@/lib/simulate";
 import { clearGame, emptyGame, loadGame, peekSavedGame, saveGame } from "@/lib/storage";
+import type { KitChoice } from "@/lib/kits";
 import type { FormationId, GameState, PlayerSeason, SimMode } from "@/lib/types";
 import { BackButton } from "./BackButton";
 import { DraftScreen } from "./DraftScreen";
@@ -70,6 +71,11 @@ export function GameApp() {
   const [loadedLeagueId, setLoadedLeagueId] = useState<LeagueId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<GameState>(emptyGame);
+  const kitRef = useRef(state.kit);
+  const chooseKit = (kit: KitChoice) => {
+    kitRef.current = kit;
+    setState((current) => ({ ...current, kit }));
+  };
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerSeason | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [loadingLeague, setLoadingLeague] = useState<LeagueId | null>(null);
@@ -93,6 +99,10 @@ export function GameApp() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    kitRef.current = state.kit;
+  }, [state.kit]);
 
   useEffect(() => {
     document.documentElement.dataset.league = previewLeagueId;
@@ -192,17 +202,17 @@ export function GameApp() {
     const bench = Array.from({ length: BENCH_SIZE }, () => null);
     const offer = pickRandomOffer(clubSeasons, new Set(), new Set(), formationId, xi, bench);
     setSelectedPlayer(null);
-    setState({
+    setState((current) => ({
       ...emptyGame(),
       phase: "draft",
-      leagueId: state.leagueId,
-      teamName: state.teamName.trim() || "Your XI",
-      kit: state.kit,
+      leagueId: current.leagueId,
+      teamName: current.teamName.trim() || "Your XI",
+      kit: current.kit,
       formationId,
       xi,
       bench,
       offer,
-    });
+    }));
   };
 
   const placePick = (target: { type: "xi"; slotId: string } | { type: "bench"; index: number }) => {
@@ -222,14 +232,14 @@ export function GameApp() {
     });
     if (!next) return;
     setSelectedPlayer(null);
-    setState({
-      ...state,
+    setState((current) => ({
+      ...current,
       xi: next.xi,
       bench: next.bench,
       usedPlayerIds: next.usedPlayerIds,
       usedClubSeasons: next.usedClubSeasons,
       offer: next.offer,
-    });
+    }));
   };
 
   const playerTeamFromLineup = () => {
@@ -243,7 +253,7 @@ export function GameApp() {
       .filter((player): player is PlayerSeason => Boolean(player));
     if (xiPlayers.length < formation.slots.length) return null;
     const benchPlayers = state.bench.filter((player): player is PlayerSeason => Boolean(player));
-    return makePlayerLeagueTeam(state.teamName, xiPlayers, benchPlayers);
+    return makePlayerLeagueTeam(state.teamName, xiPlayers, benchPlayers, kitRef.current);
   };
 
   const beginSeason = (mode: SimMode) => {
@@ -257,23 +267,27 @@ export function GameApp() {
     );
     const league =
       mode === "quick" ? simulateSeason(playerTeam, opponents) : startSeason(playerTeam, opponents);
-    setState({ ...state, phase: "season", league });
+    setState((current) => ({ ...current, kit: kitRef.current, phase: "season", league }));
   };
 
   const playNextGameweek = () => {
-    if (!state.league) return;
-    const gameweek = nextGameweek(state.league);
-    if (!gameweek) return;
-    const playerTeam = playerTeamFromLineup();
-    const league = playerTeam ? applyPlayerLineup(state.league, playerTeam) : state.league;
-    setState({ ...state, league: playGameweeks(league, gameweek) });
+    setState((current) => {
+      if (!current.league) return current;
+      const gameweek = nextGameweek(current.league);
+      if (!gameweek) return current;
+      const playerTeam = playerTeamFromLineup();
+      const league = playerTeam ? applyPlayerLineup(current.league, playerTeam) : current.league;
+      return { ...current, league: playGameweeks(league, gameweek) };
+    });
   };
 
   const quickSimRest = () => {
-    if (!state.league) return;
-    const playerTeam = playerTeamFromLineup();
-    const league = playerTeam ? applyPlayerLineup(state.league, playerTeam) : state.league;
-    setState({ ...state, league: playGameweeks(league, seasonLength(league)) });
+    setState((current) => {
+      if (!current.league) return current;
+      const playerTeam = playerTeamFromLineup();
+      const league = playerTeam ? applyPlayerLineup(current.league, playerTeam) : current.league;
+      return { ...current, league: playGameweeks(league, seasonLength(league)) };
+    });
   };
 
   const rerollOffer = () => {
@@ -290,12 +304,12 @@ export function GameApp() {
     );
     if (!offer) return;
     setSelectedPlayer(null);
-    setState({
-      ...state,
-      rerollsLeft: state.rerollsLeft - 1,
+    setState((current) => ({
+      ...current,
+      rerollsLeft: current.rerollsLeft - 1,
       usedClubSeasons: [...used],
       offer,
-    });
+    }));
   };
 
   const reset = (view: "modes" | "single" = "modes") => {
@@ -430,7 +444,7 @@ export function GameApp() {
           <div className="rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
             <KitPicker
               kit={state.kit}
-              onChange={(kit) => setState((current) => ({ ...current, kit }))}
+              onChange={chooseKit}
             />
           </div>
         </div>
@@ -449,11 +463,11 @@ export function GameApp() {
   if (state.phase === "draft" && state.formationId && state.offer && leagueInfo) {
     return (
       <main>
-        <div className="mx-auto max-w-7xl px-4 pt-6">
+        <div className="mx-auto max-w-7xl px-4 pt-20">
           <div className="rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
             <KitPicker
               kit={state.kit}
-              onChange={(kit) => setState((current) => ({ ...current, kit }))}
+              onChange={chooseKit}
             />
           </div>
         </div>
@@ -495,11 +509,10 @@ export function GameApp() {
           xi={state.xi}
           bench={state.bench}
           kit={state.kit}
-          onKit={(kit) => setState((current) => ({ ...current, kit }))}
           onNewGame={() => reset()}
           onPlayNext={playNextGameweek}
           onQuickSimRest={quickSimRest}
-          onLineupChange={(xi, bench) => setState({ ...state, xi, bench })}
+          onLineupChange={(xi, bench) => setState((current) => ({ ...current, xi, bench }))}
         />
       </main>
     );

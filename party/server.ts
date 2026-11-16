@@ -228,6 +228,8 @@ export class MatchRoom extends Server {
         seat.formationId = seat.squad.formationId;
         seat.filled = 18;
         seat.ready = true;
+        const kitFallback = this.room.seats[0]?.id === seat.id ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT;
+        if (message.kit) seat.kit = readKit(message.kit, kitFallback);
         seat.rematch = false;
         this.tryKickoff();
         await this.saveAndBroadcast();

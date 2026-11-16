@@ -17,7 +17,6 @@ import {
 import type { FormationId, GoalScorer, LeagueState, MatchResult, PlayerSeason } from "@/lib/types";
 import { DEFAULT_HOME_KIT, kitDistinctFrom, kitFromSeed, kitPatternClass, kitVars, readKit, type KitChoice } from "@/lib/kits";
 import { inferFormation, type MatchSide } from "@/lib/match-tape";
-import { KitPicker } from "./KitPicker";
 import { MatchPitch } from "./MatchPitch";
 import { Pitch } from "./Pitch";
 import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
@@ -38,7 +37,6 @@ type Props = {
   xi?: Record<string, PlayerSeason | null>;
   bench?: (PlayerSeason | null)[];
   kit?: KitChoice;
-  onKit?: (kit: KitChoice) => void;
   onNewGame: () => void;
   onPlayNext?: () => void;
   onQuickSimRest?: () => void;
@@ -80,10 +78,23 @@ function benchForSide(
   return league.teams.find((team) => team.id === teamId)?.bench ?? [];
 }
 
-function kitsForFixture(homeId: string, awayId: string, playerKit: KitChoice) {
+function kitsForFixture(
+  league: LeagueState,
+  homeId: string,
+  awayId: string,
+  playerKit: KitChoice,
+) {
   const yours = readKit(playerKit, DEFAULT_HOME_KIT);
-  if (homeId === PLAYER_TEAM_ID) return { home: yours, away: kitDistinctFrom(awayId, yours) };
-  if (awayId === PLAYER_TEAM_ID) return { home: kitDistinctFrom(homeId, yours), away: yours };
+  const homeTeam = league.teams.find((team) => team.id === homeId);
+  const awayTeam = league.teams.find((team) => team.id === awayId);
+  if (homeTeam?.isPlayer || homeId === PLAYER_TEAM_ID) {
+    const home = readKit(homeTeam?.kit ?? yours, yours);
+    return { home, away: kitDistinctFrom(awayId, home) };
+  }
+  if (awayTeam?.isPlayer || awayId === PLAYER_TEAM_ID) {
+    const away = readKit(awayTeam?.kit ?? yours, yours);
+    return { home: kitDistinctFrom(homeId, away), away };
+  }
   const home = kitFromSeed(homeId);
   return { home, away: kitDistinctFrom(awayId, home) };
 }
@@ -480,7 +491,6 @@ export function SeasonScreen({
   xi,
   bench,
   kit = DEFAULT_HOME_KIT,
-  onKit,
   onNewGame,
   onPlayNext,
   onQuickSimRest,
@@ -528,7 +538,7 @@ export function SeasonScreen({
     if (!watchMatch) return { home: null, away: null };
     const home = matchSide(league, watchMatch.homeId, formationId, xi);
     const away = matchSide(league, watchMatch.awayId, formationId, xi);
-    const kits = kitsForFixture(home.id, away.id, kit);
+    const kits = kitsForFixture(league, home.id, away.id, kit);
     return { home: { ...home, kit: kits.home }, away: { ...away, kit: kits.away } };
   }, [watchMatch, league, formationId, xi, kit]);
   const watchHome = watched.home;
@@ -644,21 +654,6 @@ export function SeasonScreen({
               {teamNameOf(league, nextFixture.awayId)}
             </div>
           </div>
-          {onKit ? (
-            <div className="mt-5 rounded-2xl border border-white/10 bg-emerald-950/50 px-4 py-3">
-              <KitPicker
-                kit={kit}
-                opponentKit={
-                  nextFixture
-                    ? kitsForFixture(nextFixture.homeId, nextFixture.awayId, kit)[
-                        nextFixture.homeId === PLAYER_TEAM_ID ? "away" : "home"
-                      ]
-                    : undefined
-                }
-                onChange={onKit}
-              />
-            </div>
-          ) : null}
           {formationId && xi && bench && onLineupChange ? (
             <LineupEditor
               formationId={formationId}
@@ -737,19 +732,6 @@ export function SeasonScreen({
                   {teamNameOf(league, nextFixture.awayId)}
                 </div>
               </div>
-              {onKit ? (
-                <div className="mt-5 rounded-2xl border border-white/10 bg-emerald-950/50 px-4 py-3">
-                  <KitPicker
-                    kit={kit}
-                    opponentKit={
-                      kitsForFixture(nextFixture.homeId, nextFixture.awayId, kit)[
-                        nextFixture.homeId === PLAYER_TEAM_ID ? "away" : "home"
-                      ]
-                    }
-                    onChange={onKit}
-                  />
-                </div>
-              ) : null}
               <LineupEditor
                 formationId={formationId}
                 xi={xi}
