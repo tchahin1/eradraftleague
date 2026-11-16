@@ -61,7 +61,8 @@ export function VsAiApp({ onLeave }: Props) {
   const clubSeasons = useMemo(() => (players ? indexClubSeasons(players) : []), [players]);
   const loadingLeague = Boolean(leagueId && loadedLeagueId !== leagueId);
   const aiKit = kitAwayFrom(kit);
-  const chooseKit = (next: KitChoice) => {
+  const chooseKit = (patch: Partial<KitChoice>) => {
+    const next = { ...kitRef.current, ...patch };
     kitRef.current = next;
     setKit(next);
   };

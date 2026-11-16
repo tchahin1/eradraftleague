@@ -11,8 +11,9 @@ import {
   stopMatchSfx,
   subscribeMatchSfxMuted,
 } from "@/lib/match-sfx";
-import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, kitPatternClass, kitStyle, kitVars, type KitChoice } from "@/lib/kits";
+import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, kitStyle, type KitChoice } from "@/lib/kits";
 import type { GoalScorer } from "@/lib/types";
+import { KitFace } from "./KitFace";
 
 type Props = {
   home: MatchSide;
@@ -92,7 +93,6 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
   const muted = useSyncExternalStore(subscribeMatchSfxMuted, isMatchSfxMuted, () => false);
   const soundOn = !muted;
   const sidesRef = useRef({ home: home.name, away: away.name, homeInk: "", awayInk: "" });
-  const kitsRef = useRef({ home: home.kit, away: away.kit });
 
   useEffect(() => {
     onRevealRef.current = onReveal;
@@ -107,7 +107,6 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
       homeInk: kitStyle(home.kit, DEFAULT_HOME_KIT).label,
       awayInk: kitStyle(away.kit, DEFAULT_AWAY_KIT).label,
     };
-    kitsRef.current = { home: home.kit, away: away.kit };
   }, [home.name, home.kit, away.name, away.kit]);
 
   useEffect(() => {
@@ -138,13 +137,6 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
         const booked = f.booked.has(dot.name) && !sentOff;
         const lifted = !sentOff && (dot.id === f.ownerId || dot.id === f.receiverId);
         const toLine = Math.min(at.y, 100 - at.y);
-        const shirt = kitVars(
-          dot.team === "home" ? (kitsRef.current.home ?? dot.kit) : (kitsRef.current.away ?? dot.kit),
-          dot.team === "home" ? DEFAULT_HOME_KIT : DEFAULT_AWAY_KIT,
-        );
-        node.style.backgroundColor = shirt.backgroundColor;
-        node.style.backgroundImage = shirt.backgroundImage;
-        node.style.color = shirt.color;
         node.style.left = `${at.x}%`;
         node.style.top = `${at.y}%`;
         node.style.opacity = sentOff ? `${Math.min(0.45, Math.max(0, (toLine - 1) / 10))}` : "1";
@@ -304,11 +296,16 @@ function MatchPitchView({ home, away, scorers, youId, onReveal, onClock, onCompl
                   playerRefs.current.delete(dot.id);
                 }
               }}
-              className={`absolute z-10 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full text-[9px] font-black tracking-wide shadow-md sm:h-8 sm:w-8 sm:text-[10px] ${kitPatternClass(kit ?? fallback)} ${dot.isGk ? "ring-2 ring-white/80" : ""} ${yours ? "outline outline-2 outline-offset-1 outline-white/50" : ""}`}
-              style={kitVars(kit, fallback)}
+              className={`absolute z-10 h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-md sm:h-8 sm:w-8 ${dot.isGk ? "ring-2 ring-white/80" : ""} ${yours ? "outline outline-2 outline-offset-1 outline-white/50" : ""}`}
               title={dot.name}
             >
-              {dot.initials}
+              <KitFace
+                kit={kit}
+                fallback={fallback}
+                className="h-full w-full text-[9px] font-black tracking-wide sm:text-[10px]"
+              >
+                {dot.initials}
+              </KitFace>
             </div>
           );
         })}

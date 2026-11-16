@@ -53,7 +53,7 @@ export const KIT_COLORS: KitSwatch[] = [
   { id: "blue", name: "Royal", hex: "#2563eb", label: "#93c5fd" },
 ];
 
-export const DEFAULT_HOME_KIT: KitChoice = { color: "amber", secondary: "black", pattern: "solid" };
+export const DEFAULT_HOME_KIT: KitChoice = { color: "amber", secondary: "black", pattern: "stripes" };
 export const DEFAULT_AWAY_KIT: KitChoice = { color: "sky", secondary: "navy", pattern: "solid" };
 
 const COLOR_IDS = new Set(KIT_COLORS.map((item) => item.id));

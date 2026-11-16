@@ -72,7 +72,8 @@ export function GameApp() {
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<GameState>(emptyGame);
   const kitRef = useRef(state.kit);
-  const chooseKit = (kit: KitChoice) => {
+  const chooseKit = (patch: Partial<KitChoice>) => {
+    const kit = { ...kitRef.current, ...patch };
     kitRef.current = kit;
     setState((current) => ({ ...current, kit }));
   };

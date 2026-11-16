@@ -70,7 +70,8 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
   const loadingLeague = Boolean(leagueId && loadedLeagueId !== leagueId);
   const [kitPick, setKitPick] = useState<KitChoice | null>(null);
   const yourKit = kitPick ?? you?.kit ?? DEFAULT_HOME_KIT;
-  const changeKit = (kit: KitChoice) => {
+  const changeKit = (patch: Partial<KitChoice>) => {
+    const kit = { ...yourKit, ...patch };
     setKitPick(kit);
     send({ type: "set-kit", kit });
   };
@@ -314,7 +315,7 @@ function PvpSession({
   clubSeasons: ClubSeason[];
   send: (message: ClientMessage) => void;
   onTeamName: (value: string) => void;
-  onKit: (kit: KitChoice) => void;
+  onKit: (patch: Partial<KitChoice>) => void;
   kit: KitChoice;
   onLeave: () => void;
 }) {

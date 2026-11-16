@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { FORMATION_BY_ID } from "@/lib/formations";
-import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, kitPatternClass, kitStyle, kitVars, type KitChoice } from "@/lib/kits";
+import { DEFAULT_AWAY_KIT, DEFAULT_HOME_KIT, kitStyle, type KitChoice } from "@/lib/kits";
+import { KitFace } from "./KitFace";
 import { squadToXiRecord, type PvpMatch, type PvpSquad } from "@/lib/pvp";
 import type { GoalScorer } from "@/lib/types";
 import { MatchPitch } from "./MatchPitch";
@@ -55,12 +56,9 @@ function Lineup({ squad, you, kit }: { squad: PvpSquad; you: boolean; kit?: KitC
         {you ? "Your XI" : "Their XI"} · {formation.name}
       </p>
       <h2 className="mt-1 flex items-center gap-2 text-2xl font-black text-white">
-        <span
-          className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[8px] ${kitPatternClass(choice)}`}
-          style={kitVars(choice)}
-        >
+        <KitFace kit={choice} className="h-6 w-6 text-[8px] font-black">
           XI
-        </span>
+        </KitFace>
         {squad.teamName}
       </h2>
       <div className="mt-3 max-w-sm">

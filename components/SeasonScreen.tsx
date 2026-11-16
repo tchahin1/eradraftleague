@@ -15,8 +15,9 @@ import {
   FORMATION_BY_ID,
 } from "@/lib/formations";
 import type { FormationId, GoalScorer, LeagueState, MatchResult, PlayerSeason } from "@/lib/types";
-import { DEFAULT_HOME_KIT, kitDistinctFrom, kitFromSeed, kitPatternClass, kitVars, readKit, type KitChoice } from "@/lib/kits";
+import { DEFAULT_HOME_KIT, kitDistinctFrom, kitFromSeed, readKit, type KitChoice } from "@/lib/kits";
 import { inferFormation, type MatchSide } from "@/lib/match-tape";
+import { KitFace } from "./KitFace";
 import { MatchPitch } from "./MatchPitch";
 import { Pitch } from "./Pitch";
 import { OverallBadge, PlayerPortrait } from "./PlayerPortrait";
@@ -116,12 +117,9 @@ function MatchLineup({
         {you ? "Your XI" : "Their XI"} · {formation.name}
       </p>
       <h2 className="mt-1 flex items-center gap-2 text-2xl font-black text-white">
-        <span
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[8px] ${kitPatternClass(kit)}`}
-          style={kitVars(kit)}
-        >
+        <KitFace kit={kit} className="h-7 w-7 text-[8px] font-black">
           XI
-        </span>
+        </KitFace>
         {side.name}
       </h2>
       <div className="mt-3 max-w-sm">
