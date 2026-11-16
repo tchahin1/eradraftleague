@@ -1,6 +1,7 @@
 "use client";
 
 import { LEAGUES, STARTING_LEAGUE_ID, type LeagueId } from "@/lib/leagues";
+import { SITE_DESCRIPTION } from "@/lib/site";
 
 export function HomeHero({ error }: { error?: string | null }) {
   return (
@@ -9,10 +10,7 @@ export function HomeHero({ error }: { error?: string | null }) {
         Europe’s top five leagues
       </p>
       <h1 className="text-5xl font-black tracking-tight text-white md:text-6xl">Era Draft League</h1>
-      <p className="max-w-xl text-lg leading-8 text-emerald-100/80">
-        Draft an XI from random club-seasons in Europe's top five leagues and win the EDL title race, or
-        challenge a friend and see who drafts better.
-      </p>
+      <p className="max-w-xl text-lg leading-8 text-emerald-100/80">{SITE_DESCRIPTION}</p>
       {error ? <p className="max-w-xl text-sm text-rose-200">{error}</p> : null}
     </>
   );

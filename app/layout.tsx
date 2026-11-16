@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, DM_Sans } from "next/font/google";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/lib/site";
 import "./globals.css";
 
 const display = Bebas_Neue({
@@ -19,20 +20,18 @@ const siteUrl =
     ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
     : "http://localhost:3000");
 
-const description =
-  "Draft an XI from random club-seasons in Europe's top five leagues and win the EDL title race, or challenge a friend and see who drafts better.";
-
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Era Draft League",
-  description,
-  applicationName: "Era Draft League",
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
   openGraph: {
-    title: "Era Draft League",
-    description,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
     type: "website",
-    siteName: "Era Draft League",
+    siteName: SITE_NAME,
     locale: "en_GB",
+    url: "/",
     images: [
       {
         url: "/og.jpg",
@@ -44,8 +43,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Era Draft League",
-    description,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
     images: ["/og.jpg"],
   },
 };

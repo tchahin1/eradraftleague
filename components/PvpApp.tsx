@@ -68,6 +68,12 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
   const link = roomCode ? inviteUrl(roomCode) : "";
   const teamName = nameDraft ?? you?.teamName ?? "";
   const loadingLeague = Boolean(leagueId && loadedLeagueId !== leagueId);
+  const [kitPick, setKitPick] = useState<KitChoice | null>(null);
+  const yourKit = kitPick ?? you?.kit ?? DEFAULT_HOME_KIT;
+  const changeKit = (kit: KitChoice) => {
+    setKitPick(kit);
+    send({ type: "set-kit", kit });
+  };
 
   useEffect(() => {
     document.documentElement.dataset.league = leagueId ?? hoveredLeague ?? STARTING_LEAGUE_ID;
@@ -212,7 +218,7 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
 
   if (!bothHere) {
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-center gap-5 px-6">
+      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col justify-start gap-5 px-6 pt-20 pb-10">
         <BackButton onClick={leave} label="Leave room" />
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">
           {leagueInfo?.name ?? "Waiting"}
@@ -242,11 +248,12 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
           />
         </label>
         {you ? (
-          <KitPicker
-            kit={you.kit ?? DEFAULT_HOME_KIT}
-            opponentKit={opponent?.kit}
-            onChange={(kit) => send({ type: "set-kit", kit })}
-          />
+          <div className="relative z-40">
+            <KitPicker kit={yourKit} opponentKit={opponent?.kit} onChange={changeKit} />
+          </div>
+        ) : null}
+        {status === "closed" ? (
+          <p className="text-sm text-amber-200">Reconnecting to the room. Your kit choice is kept and sends when it’s back.</p>
         ) : null}
         {youHost && !room.leagueId ? (
           <p className="text-sm text-amber-200">This room has no league yet. Leave and create a new one.</p>
@@ -279,7 +286,8 @@ export function PvpApp({ initialRoom, onLeave }: Props) {
         setNameDraft(value);
         send({ type: "set-profile", teamName: value });
       }}
-      onKit={(kit) => send({ type: "set-kit", kit })}
+      onKit={changeKit}
+      kit={yourKit}
       onLeave={leave}
     />
   );
@@ -295,6 +303,7 @@ function PvpSession({
   send,
   onTeamName,
   onKit,
+  kit,
   onLeave,
 }: {
   room: PvpRoomPublic;
@@ -306,6 +315,7 @@ function PvpSession({
   send: (message: ClientMessage) => void;
   onTeamName: (value: string) => void;
   onKit: (kit: KitChoice) => void;
+  kit: KitChoice;
   onLeave: () => void;
 }) {
   const [formationId, setFormationId] = useState<FormationId | null>(null);
@@ -381,7 +391,7 @@ function PvpSession({
   if (!formationId || !offer) {
     return (
       <main>
-        <div className="mx-auto max-w-6xl px-4 pt-6">
+        <div className="mx-auto max-w-6xl px-4 pt-20">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
             <p className="text-sm text-emerald-100/80">
               Room <span className="font-black tracking-[0.2em] text-white">{room.code}</span>
@@ -391,7 +401,7 @@ function PvpSession({
           </div>
           {you ? (
             <div className="mt-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
-              <KitPicker kit={you.kit ?? DEFAULT_HOME_KIT} opponentKit={opponent?.kit} onChange={onKit} />
+              <KitPicker kit={kit} opponentKit={opponent?.kit} onChange={onKit} />
             </div>
           ) : null}
         </div>
@@ -410,7 +420,7 @@ function PvpSession({
 
   return (
     <main>
-      <div className="mx-auto max-w-7xl px-4 pt-6">
+      <div className="mx-auto max-w-7xl px-4 pt-20">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
           <p className="text-sm text-emerald-100/80">
             Room <span className="font-black tracking-[0.2em] text-white">{room.code}</span>
@@ -423,7 +433,7 @@ function PvpSession({
         </div>
         {you ? (
           <div className="mt-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
-            <KitPicker kit={you.kit ?? DEFAULT_HOME_KIT} opponentKit={opponent?.kit} onChange={onKit} />
+            <KitPicker kit={kit} opponentKit={opponent?.kit} onChange={onKit} />
           </div>
         ) : null}
       </div>

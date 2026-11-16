@@ -133,7 +133,7 @@ function run(home: MatchSide, away: MatchSide, scorers: GoalScorer[], totals: To
   const notes: string[] = [];
 
   totals.tapeMs += tape.events.reduce((sum, event) => sum + event.durationMs, 0);
-  for (let i = 0; i < 60 * 240; i += 1) {
+  for (let i = 0; i < 120 * 240; i += 1) {
     const f = engine.step(DT);
     frames += 1;
     const event = f.event;

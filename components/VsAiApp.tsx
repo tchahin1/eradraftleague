@@ -255,7 +255,7 @@ export function VsAiApp({ onLeave }: Props) {
   if (!formationId || !offer) {
     return (
       <main>
-        <div className="mx-auto max-w-6xl px-4 pt-6">
+        <div className="mx-auto max-w-6xl px-4 pt-20">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
             <p className="text-sm text-emerald-100/80">
               {leagueInfo.name} · vs <span className="font-semibold text-white">AI</span>
@@ -286,7 +286,7 @@ export function VsAiApp({ onLeave }: Props) {
 
   return (
     <main>
-      <div className="mx-auto max-w-7xl px-4 pt-6">
+      <div className="mx-auto max-w-7xl px-4 pt-20">
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-emerald-950/40 px-4 py-3">
           <p className="text-sm text-emerald-100/80">
             {leagueInfo.name} · vs <span className="font-semibold text-white">AI</span>

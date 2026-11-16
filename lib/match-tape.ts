@@ -106,7 +106,8 @@ const KICKOFF_MS = 1600;
 const BUILD_MS = 3000;
 const HT_MS = 1800;
 const FT_MS = 700;
-const TAPE_CAP_MS = 60_000;
+// Players pause to reach the ball, so this lands the clip you watch near 90s.
+const TAPE_LENGTH_MS = 84_500;
 
 const STAY_BACK: SlotKind[] = ["CB", "LB", "RB"];
 
@@ -1385,8 +1386,8 @@ export function buildMatchTape(home: MatchSide, away: MatchSide, scorers: GoalSc
   }
   for (const event of stitched) dedupeTouches(event);
   const total = stitched.reduce((sum, event) => sum + event.durationMs, 0);
-  if (total > TAPE_CAP_MS) {
-    const scale = TAPE_CAP_MS / total;
+  if (total > 0) {
+    const scale = TAPE_LENGTH_MS / total;
     for (const event of stitched) {
       event.durationMs = Math.max(400, Math.round(event.durationMs * scale));
     }

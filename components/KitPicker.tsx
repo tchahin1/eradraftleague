@@ -53,7 +53,7 @@ function ColorRow({
 export function KitPicker({ kit, onChange, opponentKit }: Props) {
   const clash = Boolean(opponentKit && kitsClash(kit, opponentKit));
   return (
-    <div className="flex flex-col gap-3">
+    <div className="relative z-40 flex flex-col gap-3">
       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-300">Jersey</p>
       <ColorRow label="Main colour" selected={kit.color} onPick={(color) => onChange({ ...kit, color })} />
       <ColorRow

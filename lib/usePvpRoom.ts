@@ -16,6 +16,7 @@ export function usePvpRoom(roomCode: string | null) {
   const clientId = useMemo(() => getPvpClientId(), []);
   const host = useMemo(() => partyHost(), []);
   const socketRef = useRef<PartySocket | null>(null);
+  const queueRef = useRef<ClientMessage[]>([]);
   const [room, setRoom] = useState<PvpRoomPublic | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,15 @@ export function usePvpRoom(roomCode: string | null) {
       setStatus("connecting");
     });
 
-    const onOpen = () => setStatus("open");
+    const flush = () => {
+      const pending = queueRef.current;
+      queueRef.current = [];
+      for (const message of pending) socket.send(JSON.stringify(message));
+    };
+    const onOpen = () => {
+      setStatus("open");
+      flush();
+    };
     const onClose = () => setStatus("closed");
     const onError = () => setError("Could not reach the match room. Is the party worker running?");
     const onMessage = (event: MessageEvent) => {
@@ -68,7 +77,16 @@ export function usePvpRoom(roomCode: string | null) {
 
   const send = useCallback((message: ClientMessage) => {
     const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      const queue = queueRef.current;
+      const last = queue[queue.length - 1];
+      if (last && last.type === message.type && (message.type === "set-kit" || message.type === "set-profile")) {
+        queue[queue.length - 1] = message;
+      } else {
+        queue.push(message);
+      }
+      return;
+    }
     socket.send(JSON.stringify(message));
   }, []);
 
